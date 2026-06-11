@@ -69,6 +69,9 @@ const Game = (() => {
     const g = State.get();
     relationships.forEach(rel => { rel.id = 'rel_' + (++g.relationshipIdCounter); g.relationships.push(rel); });
     g.relationshipIdCounter = initCounter;
+    // Apply life goal chosen at creation
+    const goalSel = document.getElementById('custom-lifegoal');
+    if (goalSel && goalSel.value) Engine.setLifeGoal(goalSel.value);
     State.saveGame();
     State.addLog(0, `Born as ${characterData.firstName} ${characterData.lastName} in ${characterData.country}.`, 'birth');
     State.addLog(0, `Parents: ${relationships.filter(r=>r.subtype==='father'||r.subtype==='mother').map(r=>r.name).join(' & ')}`, 'family');

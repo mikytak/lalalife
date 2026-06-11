@@ -146,6 +146,10 @@ const Engine = (() => {
     processPetAging(c, g);
     checkParentHealth(c, g);
     checkBucketList(g);
+    checkAnniversary(c, g);
+    checkMidlifeCrisis(c);
+    checkLifeGoal(c, g);
+    c.negotiatedThisYear = false; // reset each year
 
     const stage = DATA.getStage(c.age);
     const maxEv = stage === 'infant' ? 1 : stage === 'child' ? 2 : 3;
@@ -399,6 +403,15 @@ const Engine = (() => {
     c.assets.houses.forEach(h => w += (h.equity || h.value));
     c.assets.cars.forEach(car => w += car.value);
     w -= (c.education.studentLoan || 0);
+    // Include spouse's finances
+    const g = State.get();
+    const spouse = g.relationships.find(r => r.subtype === 'spouse' && r.status === 'active');
+    if (spouse) {
+      w += (spouse.money || 0);
+      w += (spouse.investments || 0);
+      (spouse.houses || []).forEach(h => w += (h.equity || h.value || 0));
+      (spouse.cars || []).forEach(car => w += (car.value || 0));
+    }
     return w;
   }
 
@@ -422,7 +435,7 @@ const Engine = (() => {
       }
       if (choice.marry) {
         const p = State.getPartner();
-        if (p) { p.subtype = 'spouse'; p.marriedAge = c.age; State.addLog(c.age, `Married ${p.name}!`, 'rel'); UI.showToast(`Married ${p.name}!`, 'good'); }
+        if (p) { p.subtype = 'spouse'; p.marriedAge = c.age; _assignSpouseWealth(p, c); State.addLog(c.age, `Married ${p.name}!`, 'rel'); UI.showToast(`Married ${p.name}!`, 'good'); }
       }
       if (choice.breakUp) {
         const p = State.getPartner();
@@ -430,7 +443,7 @@ const Engine = (() => {
       }
       if (choice.divorce) {
         const p = State.getPartner();
-        if (p) { p.status = 'divorced'; p.type = 'ex'; State.addLog(c.age, `Divorced ${p.name}.`, 'bad'); }
+        if (p) { _applyDivorceSettlement(c, p); p.status = 'divorced'; p.type = 'ex'; State.addLog(c.age, `Divorced ${p.name}.`, 'bad'); }
       }
       if (choice.marry) { triggerMood('in_love', 4); }
       if (choice.breakUp || choice.divorce) { triggerMood('heartbroken', 3); }
@@ -508,16 +521,21 @@ const Engine = (() => {
     if (c.career.jobId) quitJob(false);
 
     c.career.jobId = careerId;
-    c.career.title = career.promotions[0].title;
-    // Apply hobby start bonus (up to +10% salary)
+    // If previously fired from this job, re-hire at same promotion level (one step down as penalty)
+    const firedLevel = (c.firedHistory || {})[careerId];
+    const startLevel = firedLevel !== undefined ? Math.max(0, firedLevel - 1) : 0;
+    const promo = career.promotions[startLevel];
     const hobbyBonus = DATA.getHobbyCareerBonus(c.hobbies, careerId);
     const extraBonus2 = DATA.getExtracurricularCareerBonus(c.extracurriculars, careerId);
-    c.career.salary = Math.round(career.salary.base * career.promotions[0].salaryMult * (1 + (hobbyBonus + extraBonus2) * 0.1));
-    c.career.yearsAtJob = 0; c.career.promotionLevel = 0; c.career.performance = 70 + Math.round(hobbyBonus * 15); c.career.retired = false;
+    c.career.title = promo.title;
+    c.career.salary = Math.round(career.salary.base * promo.salaryMult * (1 + (hobbyBonus + extraBonus2) * 0.1));
+    c.career.yearsAtJob = 0; c.career.promotionLevel = startLevel; c.career.performance = 70 + Math.round(hobbyBonus * 15); c.career.retired = false;
+    if (firedLevel !== undefined) delete c.firedHistory[careerId];
     if (!g.jobHistory.includes(careerId)) g.jobHistory.push(careerId);
-    State.addLog(c.age, `Started career: ${career.name} — ${career.promotions[0].title}`, 'career');
+    const rehireNote = startLevel > 0 ? ` (rehired at ${promo.title})` : '';
+    State.addLog(c.age, `Started career: ${career.name} — ${promo.title}`, 'career');
     State.saveGame();
-    return { ok:true, msg:`You are now a ${career.promotions[0].title}!` };
+    return { ok:true, msg:`You are now a ${promo.title}!${rehireNote}` };
   }
 
   function quitJob(fired = false) {
@@ -525,6 +543,11 @@ const Engine = (() => {
     if (!c.career.jobId) return;
     const career = DATA.getCareer(c.career.jobId);
     State.addLog(c.age, fired ? `Fired from ${career?.name||'job'}.` : `Left ${career?.name||'job'}.`, fired?'bad':'event');
+    if (fired) {
+      // Remember the promotion level so player can re-apply at same tier
+      c.firedHistory = c.firedHistory || {};
+      c.firedHistory[c.career.jobId] = c.career.promotionLevel;
+    }
     c.career.jobId=null; c.career.title=null; c.career.salary=0; c.career.yearsAtJob=0; c.career.promotionLevel=0;
     State.saveGame();
   }
@@ -551,6 +574,18 @@ const Engine = (() => {
     return { ok:true, msg:'Happiness up, performance down.' };
   }
 
+  // ── Spouse wealth generation (called once on marriage) ───────
+  function _assignSpouseWealth(spouse, char) {
+    if (spouse.money !== undefined) return; // already assigned
+    const wealthTiers = { impoverished:[500,5000], lower_class:[5000,30000], middle_class:[20000,120000], upper_class:[80000,500000], wealthy:[300000,2000000] };
+    const tier = char.wealthClass || 'middle_class';
+    const [lo, hi] = wealthTiers[tier] || wealthTiers.middle_class;
+    spouse.money = Math.round(lo + Math.random() * (hi - lo));
+    spouse.investments = Math.random() > 0.5 ? Math.round(spouse.money * (Math.random() * 0.4)) : 0;
+    spouse.houses = Math.random() > 0.7 ? [{ name:'Partner\'s Home', value: Math.round(100000 + Math.random()*200000), equity: Math.round(20000 + Math.random()*80000) }] : [];
+    spouse.cars = Math.random() > 0.4 ? [{ name:'Partner\'s Car', value: Math.round(5000 + Math.random()*25000) }] : [];
+  }
+
   // ── Education actions ─────────────────────────────────────────
   function enrollUniversity(major, loanAmount) {
     const c = State.getChar();
@@ -566,15 +601,71 @@ const Engine = (() => {
     if ((c.education.gpa || 2.5) >= 3.5) {
       baseCost = Math.round(baseCost * 0.5);
     }
+    // Apply any scholarship funds earned via requestScholarship()
+    const schFunds = Math.min(c.scholarshipFunds || 0, baseCost);
+    if (schFunds > 0) { baseCost -= schFunds; c.scholarshipFunds = (c.scholarshipFunds || 0) - schFunds; }
     const institutions = ['State University','City College','Northern University','Westbrook College','Pacific University'];
     c.education.inSchool = true; c.education.schoolType = 'university';
     c.education.schoolYear = 0; c.education.schoolDuration = duration;
     c.education.major = major; c.education.institution = DATA.randomFrom(institutions);
     c.education.studentLoan += loanAmount;
     c.money -= Math.max(0, baseCost - loanAmount);
-    State.addLog(c.age, `Enrolled at ${c.education.institution} to study ${major} (${duration} yrs)`, 'edu');
+    const schNote = schFunds > 0 ? ` (${DATA.fmtMoney(schFunds)} scholarship applied)` : '';
+    State.addLog(c.age, `Enrolled at ${c.education.institution} to study ${major} (${duration} yrs)${schNote}`, 'edu');
     State.saveGame();
-    return { ok:true, msg:`Enrolled! ${duration} years to graduation.` };
+    return { ok:true, msg:`Enrolled! ${duration} years to graduation.${schNote}` };
+  }
+
+  function requestScholarship() {
+    const c = State.getChar();
+    if (c.education.inSchool) return { ok:false, msg:'Already enrolled in school.' };
+    if (c.age < 17) return { ok:false, msg:'Must be at least 17.' };
+    if (c.education.level === 'doctorate') return { ok:false, msg:'Already have the highest degree.' };
+    if (c.scholarshipAppliedAge === c.age) return { ok:false, msg:'Already applied for a scholarship this year.' };
+    const gpa = c.education.gpa || 2.5;
+    const smarts = c.smarts || 50;
+    // Chance: 10% base + GPA contribution + smarts contribution
+    const chance = Math.min(0.95, 0.10 + Math.max(0, gpa - 2.0) * 0.15 + smarts * 0.003);
+    c.scholarshipAppliedAge = c.age;
+    if (Math.random() < chance) {
+      const lvl = c.education.level;
+      const amounts = { none: 25000, some_college: 20000, bachelor: 18000, master: 25000 };
+      const award = amounts[lvl] || 20000;
+      c.scholarshipFunds = (c.scholarshipFunds || 0) + award;
+      State.addLog(c.age, `Scholarship awarded! ${DATA.fmtMoney(award)} toward education.`, 'edu');
+      State.saveGame();
+      return { ok:true, msg:`Scholarship awarded! ${DATA.fmtMoney(award)} will be applied when you enroll.` };
+    } else {
+      State.addLog(c.age, 'Applied for a scholarship — not selected this time.', 'edu');
+      State.saveGame();
+      return { ok:false, msg:`Scholarship application denied. GPA ${gpa.toFixed(2)} — study harder to improve your odds.` };
+    }
+  }
+
+  function askParentsForMoney() {
+    const g = State.get(); const c = g.character;
+    if (c.age > 30) return { ok:false, msg:'Your parents expect you to be independent by now.' };
+    if (c.askedParentsAge === c.age) return { ok:false, msg:'Already asked parents for money this year.' };
+    const parents = g.relationships.filter(r => (r.subtype === 'father' || r.subtype === 'mother') && r.status === 'active');
+    if (!parents.length) return { ok:false, msg:'No living parents to ask.' };
+    c.askedParentsAge = c.age;
+    const avgRel = parents.reduce((s, p) => s + p.relationship, 0) / parents.length;
+    const wealthMod = { impoverished:0.2, lower_class:0.5, middle_class:1.0, upper_class:2.0, wealthy:5.0 }[c.wealthClass] || 1.0;
+    const chance = Math.min(0.9, 0.3 + (avgRel - 50) * 0.01);
+    if (Math.random() < chance) {
+      const base = Math.round((500 + Math.random() * 4500) * wealthMod);
+      const amount = Math.max(100, base);
+      c.money += amount;
+      parents.forEach(p => { p.relationship = Math.max(0, p.relationship - 5); });
+      State.addLog(c.age, `Parents gave you ${DATA.fmtMoney(amount)}.`, 'good');
+      State.saveGame();
+      return { ok:true, msg:`Your parents came through! Received ${DATA.fmtMoney(amount)}.` };
+    } else {
+      parents.forEach(p => { p.relationship = Math.max(0, p.relationship - 3); });
+      State.addLog(c.age, 'Asked parents for money — they said no.', 'event');
+      State.saveGame();
+      return { ok:false, msg:'Parents said no. Maybe try improving your relationship first.' };
+    }
   }
 
   function enrollTrade(certId) {
@@ -725,6 +816,7 @@ const Engine = (() => {
         if (rel.relationship < 60) return { ok:false, msg:'Relationship too low (need 60).' };
         if (c.age < 18) return { ok:false, msg:'Must be 18 to propose.' };
         rel.subtype = 'spouse'; rel.marriedAge = c.age;
+        _assignSpouseWealth(rel, c);
         State.applyEffects({ happiness:25 });
         msg = `Proposed to ${rel.name} — they said yes!`;
         State.unlockAchievement('happily_ever_after'); break;
@@ -1263,8 +1355,10 @@ const Engine = (() => {
       const deathChance = pAge < 75 ? 0.02 : pAge < 85 ? 0.06 : pAge < 95 ? 0.14 : 0.28;
       if (Math.random() < deathChance) {
         rel.status = 'deceased';
-        // Inheritance
-        const inheritance = Math.round(20000 + Math.random() * 80000);
+        // Inheritance scales with wealth class
+        const inhRanges = { impoverished:[500,5000], lower_class:[2000,15000], middle_class:[10000,80000], upper_class:[50000,300000], wealthy:[200000,1500000] };
+        const [inhLo, inhHi] = inhRanges[c.wealthClass] || inhRanges.middle_class;
+        const inheritance = Math.round(inhLo + Math.random() * (inhHi - inhLo));
         c.money += inheritance;
         State.applyEffects({ happiness:-20, mentalHealth:-15 });
         State.addLog(c.age, `${rel.name} passed away at age ${pAge}. You inherited ${DATA.fmtMoney(inheritance)}.`, 'bad');
@@ -1622,10 +1716,138 @@ const Engine = (() => {
     return { ...legacy, bonuses };
   }
 
+  // ── Divorce settlement ────────────────────────────────────────
+  function _applyDivorceSettlement(c, spouse) {
+    const rel = spouse.relationship || 50;
+    // Higher relationship = more amicable = keep more; messy divorce = lose half
+    const keepFraction = rel >= 70 ? 0.75 : rel >= 40 ? 0.55 : 0.4;
+    const spousePool = (spouse.money || 0) + (spouse.investments || 0);
+    // Player pays out a share of combined cash to spouse (or gains from rich spouse)
+    const combined = c.money + spousePool;
+    const playerShare = Math.round(combined * keepFraction);
+    const lost = c.money - playerShare;
+    c.money = Math.max(0, playerShare);
+    const settlementDesc = lost > 0
+      ? `Settlement: paid ${DATA.fmtMoney(Math.abs(lost))} to ${spouse.name}.`
+      : `Settlement: received ${DATA.fmtMoney(Math.abs(lost))} from ${spouse.name}.`;
+    State.addLog(c.age, settlementDesc, 'bad');
+    UI.showToast(settlementDesc, lost > 0 ? 'bad' : 'info');
+    // Lose a house if messy divorce
+    if (rel < 40 && c.assets.houses.length > 0) {
+      const lost_house = c.assets.houses.splice(0, 1)[0];
+      State.addLog(c.age, `Lost ${lost_house.name} in the divorce.`, 'bad');
+    }
+    triggerMood('heartbroken', 4);
+  }
+
+  // ── Negotiate salary ──────────────────────────────────────────
+  function negotiateSalary() {
+    const c = State.getChar();
+    if (!c.career.jobId) return { ok:false, msg:'You need a job first.' };
+    if (c.career.retired) return { ok:false, msg:'You are retired.' };
+    if (c.negotiatedThisYear) return { ok:false, msg:'Already negotiated this year.' };
+    c.negotiatedThisYear = true;
+    const perf = c.career.performance;
+    const chance = perf >= 80 ? 0.7 : perf >= 60 ? 0.45 : 0.2;
+    if (Math.random() < chance) {
+      const raise = Math.round(c.career.salary * (0.05 + Math.random() * 0.1));
+      c.career.salary += raise;
+      State.applyEffects({ happiness: 8 });
+      State.addLog(c.age, `Negotiated a raise: +${DATA.fmtMoney(raise)}/yr. New salary: ${DATA.fmtMoney(c.career.salary)}.`, 'career');
+      State.saveGame();
+      return { ok:true, msg:`Raise approved! +${DATA.fmtMoney(raise)}/yr.` };
+    } else {
+      State.applyEffects({ happiness:-5 });
+      // Risky: if perf very low, boss gets annoyed
+      const annoyed = perf < 40 && Math.random() < 0.3;
+      if (annoyed) c.career.performance = Math.max(0, c.career.performance - 10);
+      State.addLog(c.age, 'Requested a raise — denied.', 'career');
+      State.saveGame();
+      return { ok:false, msg: annoyed ? 'Denied — and the boss is irritated.' : 'Request denied. Keep performing well and try again.' };
+    }
+  }
+
+  // ── Anniversary events ────────────────────────────────────────
+  function checkAnniversary(c, g) {
+    const spouse = g.relationships.find(r => r.subtype === 'spouse' && r.status === 'active');
+    if (!spouse || !spouse.marriedAge) return;
+    const years = c.age - spouse.marriedAge;
+    const milestones = { 1:'1st', 5:'5th', 10:'10th', 25:'25th', 50:'50th' };
+    if (!milestones[years]) return;
+    const label = milestones[years];
+    const happBoost = years >= 25 ? 20 : years >= 10 ? 15 : 10;
+    State.applyEffects({ happiness: happBoost });
+    State.addLog(c.age, `${label} wedding anniversary with ${spouse.name}! Celebrated together.`, 'rel');
+    UI.showToast(`Happy ${label} anniversary with ${spouse.name}!`, 'good');
+    triggerMood('in_love', 3);
+  }
+
+  // ── Midlife crisis ────────────────────────────────────────────
+  function checkMidlifeCrisis(c) {
+    if (c.hadMidlifeCrisis) return;
+    if (c.age < 40 || c.age > 55) return;
+    if (c.happiness > 65) return; // only triggers if not super happy
+    if (Math.random() > 0.25) return;
+    c.hadMidlifeCrisis = true;
+    const outcomes = [
+      { msg:'You buy a flashy sports car on impulse.', money:-25000, happiness:15, addCar:{ name:'Sports Car', value:22000 } },
+      { msg:'You quit your job to "find yourself."', fireSelf:true, happiness:10, mentalHealth:5 },
+      { msg:'You book an extravagant solo trip around the world.', money:-8000, happiness:20 },
+      { msg:'You start an impulsive new hobby and blow your savings on equipment.', money:-3000, happiness:12 },
+      { msg:'You dye your hair, get a tattoo, and reinvent your look.', happiness:18, tattoo:true },
+    ];
+    const o = DATA.randomFrom(outcomes);
+    if (o.money) c.money = Math.max(0, c.money + o.money);
+    if (o.fireSelf && c.career.jobId) quitJob(false);
+    if (o.addCar) c.assets.cars.push(o.addCar);
+    if (o.tattoo) c.tattoos = (c.tattoos || 0) + 1;
+    State.applyEffects({ happiness: o.happiness || 0, mentalHealth: o.mentalHealth || 0 });
+    State.addLog(c.age, `Midlife crisis! ${o.msg}`, 'event');
+    UI.showToast(`Midlife crisis: ${o.msg}`, 'info');
+    triggerMood('anxious', 2);
+  }
+
+  // ── Life goal ─────────────────────────────────────────────────
+  const LIFE_GOALS = [
+    { id:'rich',      label:'Get Rich',         desc:'Accumulate $1M+ net worth',         check: (c,g) => Engine.getNetWorth(c) >= 1000000 },
+    { id:'family',    label:'Build a Family',   desc:'Marry and have 3+ children',        check: (c,g) => g.relationships.some(r=>r.subtype==='spouse'&&r.status==='active') && g.relationships.filter(r=>r.subtype==='child').length >= 3 },
+    { id:'career',    label:'Reach the Top',    desc:'Reach the top promotion in any job',check: (c,g) => { const car=DATA.getCareer(c.career.jobId||''); return car && c.career.promotionLevel===car.promotions.length-1; } },
+    { id:'educated',  label:'Scholar',          desc:'Earn a doctorate',                  check: (c,g) => c.education.level==='doctorate' },
+    { id:'travel',    label:'World Traveler',   desc:'Visit 10+ countries',               check: (c,g) => (c.travelStamps||[]).length >= 10 },
+    { id:'famous',    label:'Fame & Glory',     desc:'Reach 80+ fame',                    check: (c,g) => c.fame >= 80 },
+    { id:'happy',     label:'Simple Happiness', desc:'Maintain 80+ happiness at age 60+', check: (c,g) => c.age >= 60 && c.happiness >= 80 },
+  ];
+
+  function setLifeGoal(goalId) {
+    const c = State.getChar();
+    if (!LIFE_GOALS.find(g => g.id === goalId)) return { ok:false, msg:'Unknown goal.' };
+    c.lifeGoal = goalId;
+    const goal = LIFE_GOALS.find(g => g.id === goalId);
+    State.addLog(c.age, `Set your life goal: ${goal.label} — ${goal.desc}`, 'activity');
+    State.saveGame();
+    return { ok:true, msg:`Life goal set: ${goal.label}!` };
+  }
+
+  function checkLifeGoal(c, g) {
+    if (!c.lifeGoal || c.lifeGoalCompleted) return;
+    const goal = LIFE_GOALS.find(gl => gl.id === c.lifeGoal);
+    if (!goal) return;
+    try {
+      if (goal.check(c, g)) {
+        c.lifeGoalCompleted = true;
+        State.applyEffects({ happiness: 25 });
+        State.addLog(c.age, `Life goal achieved: ${goal.label}! A dream fulfilled.`, 'good');
+        UI.showToast(`Life goal achieved: ${goal.label}!`, 'good');
+        triggerMood('content', 5);
+      }
+    } catch(e) {}
+  }
+
   return {
     createCharacter, ageUp, applyEventChoice,
-    applyJob, quitJob, workHard, slackOff,
-    enrollUniversity, enrollTrade,
+    applyJob, quitJob, workHard, slackOff, negotiateSalary,
+    enrollUniversity, enrollTrade, requestScholarship, askParentsForMoney,
+    setLifeGoal, LIFE_GOALS,
     buyHouse, sellHouse, buyCar, sellCar, invest, casino,
     relationshipAction, planWedding, askFriendOut, planChild,
     doActivity, buyItem,

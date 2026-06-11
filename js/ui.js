@@ -46,6 +46,21 @@ const UI = (() => {
     qs('#ageup-next').textContent = c.age + 1;
     qs('#btn-age-up').disabled = false;
 
+    // Life goal indicator
+    const goalEl = qs('#hdr-lifegoal');
+    if (goalEl) {
+      if (c.lifeGoal) {
+        const goalDef = Engine.LIFE_GOALS.find(gl => gl.id === c.lifeGoal);
+        if (goalDef) {
+          goalEl.textContent = c.lifeGoalCompleted ? `Goal: ${goalDef.label} ✓` : `Goal: ${goalDef.label}`;
+          goalEl.style.color = c.lifeGoalCompleted ? 'var(--green)' : 'var(--accent)';
+          goalEl.style.display = '';
+        }
+      } else {
+        goalEl.style.display = 'none';
+      }
+    }
+
     // Energy dots
     const energy    = c.energy    ?? 0;
     const energyMax = c.energyMax ?? 3;
@@ -337,6 +352,36 @@ const UI = (() => {
           });
           div.appendChild(card);
         });
+      }
+    }
+
+    // ── Family Finance (ask parents for money, age ≤ 30) ──────
+    if (c.age <= 30) {
+      const g = State.get();
+      const livingParents = g.relationships.filter(r => (r.subtype==='father'||r.subtype==='mother') && r.status==='active');
+      if (livingParents.length) {
+        const famHdr = document.createElement('div'); famHdr.className = 'section-title'; famHdr.textContent = 'Family'; div.appendChild(famHdr);
+        const alreadyAsked = c.askedParentsAge === c.age;
+        const avgRel = livingParents.reduce((s,p)=>s+p.relationship,0)/livingParents.length;
+        const parentCard = document.createElement('div');
+        parentCard.className = 'item-card' + (alreadyAsked ? '' : ' clickable');
+        parentCard.innerHTML = `
+          <div class="item-top">
+            <div class="item-icon ic-rose">$</div>
+            <div class="item-info">
+              <div class="item-name">Ask Parents for Money</div>
+              <div class="item-sub">${alreadyAsked ? 'Already asked this year' : `Relationship ${Math.round(avgRel)}% · ${avgRel >= 70 ? 'They like you — good odds' : 'Improve the relationship first'}`}</div>
+            </div>
+          </div>`;
+        if (!alreadyAsked) {
+          parentCard.addEventListener('click', () => {
+            const r = Engine.askParentsForMoney();
+            showToast(r.msg, r.ok ? 'good' : 'bad');
+            if (r.ok) updateDisplay();
+            renderActivities();
+          });
+        }
+        div.appendChild(parentCard);
       }
     }
 
@@ -808,16 +853,31 @@ const UI = (() => {
         const iconMap = { father:'Fa', mother:'Mo', sibling:'Si', child:'Ch', friend:'Fr', crush:'Cr', partner:'Pa', spouse:'Sp', ex:'Ex' };
         const icon = iconMap[rel.subtype] || '??';
         const inCircle = c.socialCircle.includes(rel.id);
+        const isRomantic = rel.type === 'partner';
+        const loveLabel = (() => {
+          if (!isRomantic || !active) return '';
+          const r = rel.relationship;
+          if (r >= 90) return { text:'Deeply in Love', color:'#e0558a' };
+          if (r >= 75) return { text:'Very Happy', color:'#d4488a' };
+          if (r >= 60) return { text:'In Love', color:'#c86e9a' };
+          if (r >= 45) return { text:'Getting Closer', color:'#a07090' };
+          if (r >= 30) return { text:'Rocky', color:'#a08060' };
+          return { text:'On the Rocks', color:'var(--red)' };
+        })();
+        const loveBarColor = isRomantic && active
+          ? (rel.relationship >= 60 ? '#e0558a' : rel.relationship >= 30 ? '#c88050' : 'var(--red)')
+          : 'var(--accent)';
         card.innerHTML = `
           <div class="item-top">
             <div class="item-icon ic-rose">${icon}</div>
             <div class="item-info">
               <div class="item-name">${rel.name} <span class="text-dim">(${rel.age})</span>${inCircle?'<span class="badge badge-accent" style="margin-left:4px">Circle</span>':''}</div>
               <div class="item-sub">${ucFirst(rel.subtype)}${!active ? ' · ' + rel.status : ''}</div>
+              ${loveLabel ? `<div style="font-size:.72rem;font-weight:700;color:${loveLabel.color};margin-top:2px">${loveLabel.text}</div>` : ''}
             </div>
             <span class="text-dim" style="font-size:.78rem;font-weight:700">${rel.relationship}%</span>
           </div>
-          <div class="rel-meter"><div class="rel-meter-bar"><div class="rel-meter-fill" style="width:${rel.relationship}%"></div></div></div>
+          <div class="rel-meter"><div class="rel-meter-bar"><div class="rel-meter-fill" style="width:${rel.relationship}%;background:${loveBarColor}"></div></div></div>
           ${active && rel.type==='friend' ? `<div class="item-actions" style="margin-top:6px"><button class="btn btn-xs ${inCircle?'btn-ghost':'btn-secondary'}" data-circle="${rel.id}">${inCircle?'Remove from Circle':'Add to Circle'}</button></div>` : ''}
         `;
         card.querySelector('[data-circle]')?.addEventListener('click', e => {
@@ -1016,11 +1076,13 @@ const UI = (() => {
         <div class="item-actions">
           <button class="btn btn-success btn-sm" id="btn-work-hard">Work Hard</button>
           <button class="btn btn-ghost btn-sm" id="btn-slack">Slack Off</button>
+          <button class="btn btn-secondary btn-sm" id="btn-negotiate" ${c.negotiatedThisYear ? 'disabled' : ''}>Negotiate Raise</button>
           <button class="btn btn-danger btn-sm" id="btn-quit-job">Quit</button>
         </div>`;
       div.appendChild(card);
       qs('#btn-work-hard').addEventListener('click', () => { const r=Engine.workHard(); showToast(r.msg,'good'); updateDisplay(); closeModal('career'); });
       qs('#btn-slack').addEventListener('click', () => { const r=Engine.slackOff(); showToast(r.msg,r.ok?'info':'bad'); updateDisplay(); closeModal('career'); });
+      qs('#btn-negotiate').addEventListener('click', () => { const r=Engine.negotiateSalary(); showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderCareer(); });
       qs('#btn-quit-job').addEventListener('click', () => { if(confirm(`Quit as ${c.career.title}?`)){Engine.quitJob(false);showToast('Left job.','info');updateDisplay();renderCareer();} });
     } else {
       if (c.age < 16) { div.appendChild(makeEmpty('Jr', 'Too young to work. Focus on school!')); }
@@ -1064,6 +1126,8 @@ const UI = (() => {
         const totalB = hobbyB + extB;
         const card = document.createElement('div');
         card.className = `item-card${check.meets ? ' clickable' : ' locked'}`;
+        const firedLevel = (c.firedHistory || {})[career.id];
+        const rehirePromo = firedLevel !== undefined && firedLevel > 0 ? career.promotions[Math.max(0, firedLevel-1)] : null;
         card.innerHTML = `
           <div class="item-top">
             <div class="item-icon ${career.iconClass}">${career.icon}</div>
@@ -1072,6 +1136,7 @@ const UI = (() => {
               <div class="item-sub text-green">${DATA.fmtMoney(career.salary.base)} – ${DATA.fmtMoney(career.salary.max)}/yr</div>
               ${check.meets ? '' : `<div class="item-lock">Requires: ${check.missing.join(', ')}</div>`}
               ${totalB > 0 ? `<div class="item-detail text-accent">Bonus: +${Math.round(totalB*10)}% salary${hobbyB>0&&extB>0?' (hobby + school)':hobbyB>0?' (hobby)':' (school activity)'}</div>` : ''}
+              ${rehirePromo ? `<div class="item-detail" style="color:var(--yellow)">Re-hire: start as ${rehirePromo.title}</div>` : ''}
             </div>
           </div>`;
         if (check.meets) {
@@ -1169,27 +1234,48 @@ const UI = (() => {
       const uniHdr = document.createElement('div'); uniHdr.className = 'section-title'; uniHdr.textContent = 'University'; div.appendChild(uniHdr);
       const lvl = edu.level;
       if (lvl === 'doctorate') { const n=document.createElement('p'); n.className='text-green'; n.textContent='You hold the highest available degree.'; div.appendChild(n); return; }
+
+      // Scholarship section
+      const schFunds = c.scholarshipFunds || 0;
+      const alreadyApplied = c.scholarshipAppliedAge === c.age;
+      const schCard = document.createElement('div');
+      schCard.className = 'item-card' + (alreadyApplied ? '' : ' clickable');
+      schCard.innerHTML = `
+        <div class="flex-between">
+          <span class="fw-700">Request Scholarship</span>
+          <span class="${schFunds > 0 ? 'text-green' : 'text-dim'}">${schFunds > 0 ? DATA.fmtMoney(schFunds) + ' available' : 'None yet'}</span>
+        </div>
+        <div class="text-dim">GPA ${(edu.gpa||2.5).toFixed(2)} — ${alreadyApplied ? 'Applied this year' : 'Higher GPA = better odds'}</div>`;
+      if (!alreadyApplied) {
+        schCard.addEventListener('click', () => { const r=Engine.requestScholarship(); showToast(r.msg, r.ok?'good':'bad'); updateDisplay(); renderEducation(); });
+      }
+      div.appendChild(schCard);
+
       const targetMap = { else:'Bachelor', bachelor:'Master', master:'Doctorate' };
       const durationMap = { else:4, bachelor:2, master:4 };
       const baseCostMap = { else:50000, bachelor:40000, master:60000 };
       const key = lvl === 'bachelor' ? 'bachelor' : lvl === 'master' ? 'master' : 'else';
-      const targetDeg = targetMap[key]; const duration = durationMap[key]; const baseCost = baseCostMap[key];
+      const targetDeg = targetMap[key]; const duration = durationMap[key]; let baseCost = baseCostMap[key];
+      if ((edu.gpa||2.5) >= 3.5) baseCost = Math.round(baseCost * 0.5);
+      const schApplied = Math.min(schFunds, baseCost);
+      const effectiveCost = baseCost - schApplied;
 
       const majorSel = document.createElement('select'); majorSel.className = 'form-input select-input mb-8';
       DATA.UNIVERSITY_MAJORS.forEach(m => { const o=document.createElement('option'); o.value=m; o.textContent=m; majorSel.appendChild(o); });
       div.appendChild(majorSel);
 
-      [0, Math.round(baseCost*0.5), baseCost].forEach(loan => {
-        const oop = Math.max(0, baseCost - loan);
+      [0, Math.round(effectiveCost*0.5), effectiveCost].forEach(loan => {
+        const oop = Math.max(0, effectiveCost - loan);
         const canAff = c.money >= oop;
         const card = document.createElement('div');
         card.className = `item-card${canAff ? ' clickable' : ''}`;
+        const schNote = schApplied > 0 ? ` <span class="text-green">(${DATA.fmtMoney(schApplied)} scholarship)</span>` : '';
         card.innerHTML = `
           <div class="flex-between">
             <span class="fw-700">${targetDeg} — ${loan>0?DATA.fmtMoney(loan)+' loan':'Self-funded'}</span>
             <span class="${canAff?'text-green':'text-red'}">${DATA.fmtMoney(oop)} upfront</span>
           </div>
-          <div class="text-dim">${duration} years</div>`;
+          <div class="text-dim">${duration} years${schNote}</div>`;
         if (canAff) { card.addEventListener('click', () => { const r=Engine.enrollUniversity(majorSel.value,loan); showToast(r.msg,r.ok?'good':'bad'); if(r.ok){updateDisplay();renderEducation();} }); }
         div.appendChild(card);
       });
@@ -1258,6 +1344,9 @@ const UI = (() => {
       bAct.appendChild(mRow);
     });
 
+    const g2 = State.get();
+    const spouse = g2.relationships.find(r => r.subtype==='spouse' && r.status==='active');
+    const spouseNW = spouse ? (spouse.money||0)+(spouse.investments||0)+(spouse.houses||[]).reduce((s,h)=>s+(h.equity||h.value||0),0)+(spouse.cars||[]).reduce((s,v)=>s+(v.value||0),0) : 0;
     const sumCard = document.createElement('div'); sumCard.className = 'summary-card mb-8';
     sumCard.innerHTML = `
       <div class="flex-between">
@@ -1266,6 +1355,7 @@ const UI = (() => {
       </div>
       <div class="text-dim">Cash: ${DATA.fmtMoney(c.money)} · Investments: ${DATA.fmtMoney(c.assets.investments)}</div>
       ${c.education.studentLoan>0?`<div class="text-red">Loan: -${DATA.fmtMoney(c.education.studentLoan)}</div>`:''}
+      ${spouse ? `<div class="text-dim" style="margin-top:4px">Partner (${spouse.name}): ${DATA.fmtMoney(spouseNW)}</div>` : ''}
     `;
     div.appendChild(sumCard);
 
