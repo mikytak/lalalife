@@ -5,6 +5,36 @@
 
 const Engine = (() => {
 
+  // ── City tier assignment ──────────────────────────────────────
+  function assignCityTier(wealthId) {
+    const r = Math.random();
+    if (wealthId === 'ultra-rich' || wealthId === 'wealthy') return r < 0.6 ? 'metropolis' : 'big_city';
+    if (wealthId === 'upper-middle') return r < 0.5 ? 'big_city' : 'medium';
+    if (wealthId === 'middle') return r < 0.4 ? 'big_city' : r < 0.75 ? 'medium' : 'small_town';
+    return r < 0.4 ? 'medium' : 'small_town';
+  }
+
+  // ── Energy helpers ────────────────────────────────────────────
+  function getEnergyMax(age) {
+    if (age < 6)  return 2;
+    if (age < 13) return 3;
+    if (age < 18) return 4;
+    if (age < 30) return 6;
+    if (age < 50) return 7;
+    if (age < 65) return 5;
+    return 4;
+  }
+
+  function hasEnergy(amount = 1) {
+    return (State.getChar().energy || 0) >= amount;
+  }
+
+  function spendEnergy(amount = 1) {
+    const c = State.getChar();
+    c.energy = Math.max(0, (c.energy || 0) - amount);
+    State.saveGame();
+  }
+
   // ── Create a character with optional customization ─────────────
   function createCharacter({ firstName, lastName, country, gender, sexuality } = {}) {
     const resolvedGender  = (gender === 'random' || !gender) ? (Math.random() < 0.5 ? 'female' : 'male') : gender;
@@ -21,6 +51,10 @@ const Engine = (() => {
     const nameData = DATA.generateFamilyNames(lastName || null, resolvedCountry);
     const childFirst = firstName || DATA.randomFrom(resolvedGender === 'female' ? DATA.FEMALE_NAMES : DATA.MALE_NAMES);
 
+    // Apply legacy bonuses
+    const legacy  = loadLegacy();
+    const legBonus = getLegacyBonuses(legacy.totalPoints);
+
     const characterData = {
       firstName: childFirst,
       lastName: nameData.childSurname,
@@ -30,17 +64,32 @@ const Engine = (() => {
       country: resolvedCountry.name,
       countryFlag: resolvedCountry.flag,
       wealthClass: wealth.id,
-      health: State.clampStat(health),
-      happiness: State.clampStat(happiness),
-      smarts: State.clampStat(smarts),
-      looks: State.clampStat(looks),
+      health:    State.clampStat(health    + (legBonus.health    || 0)),
+      happiness: State.clampStat(happiness + (legBonus.happiness || 0)),
+      smarts:    State.clampStat(smarts    + (legBonus.smarts    || 0)),
+      looks:     State.clampStat(looks     + (legBonus.looks     || 0)),
       fame: 0,
-      money: Math.round(wealth.startMoney * (0.8 + Math.random() * 0.4) * resolvedCountry.wealthMod),
-      education: { level:'none', major:null, institution:null, gpa:0, studentLoan:0, certificates:[], inSchool:false, schoolType:null, schoolYear:0, schoolDuration:0, pendingCert:null },
+      money: Math.round(wealth.startMoney * (0.8 + Math.random() * 0.4) * resolvedCountry.wealthMod) + (legBonus.money || 0),
+      education: { level:'none', major:null, institution:null, gpa:2.5, studentLoan:0, certificates:[], inSchool:false, schoolType:null, schoolYear:0, schoolDuration:0, pendingCert:null },
       career: { jobId:null, title:null, salary:0, yearsAtJob:0, promotionLevel:0, performance:70, retired:false },
       assets: { houses:[], cars:[], investments:0 },
       hobbies: [],
       extracurriculars: [],
+      items: [],
+      energy: getEnergyMax(0),
+      energyMax: getEnergyMax(0),
+      mentalHealth: 80,
+      pet: null,
+      travelStamps: [],
+      mood: null,
+      reputation: 50,
+      conditions: [],
+      socialCircle: [],
+      bucketList: [],
+      cityTier: assignCityTier(wealth.id),
+      style: 'casual',
+      tattoos: 0,
+      bank: { savings: 0, apy: 0.035 },
       sexuality: (sexuality === 'discover' || !sexuality)
         ? DATA.randomFrom(['straight','straight','straight','gay','bisexual','pansexual','asexual'])
         : sexuality,
@@ -81,12 +130,22 @@ const Engine = (() => {
     g.currentYear++;
     g.relationships.forEach(r => { if (r.status === 'active') r.age++; });
 
+    // Refill energy each birthday
+    c.energyMax = getEnergyMax(c.age);
+    c.energy = c.energyMax;
+
     applyStatDrift(c);
+    applyMentalHealthDrift(c, g);
+    applyMoodDrift(c);
     applyPassiveEffects(c, g);
+    processConditions(c);
     updateEducation(c, g);
     updateCareerPerformance(c);
     applyHobbyPassiveGains(c);
     applyExtracurricularPassiveGains(c);
+    processPetAging(c, g);
+    checkParentHealth(c, g);
+    checkBucketList(g);
 
     const stage = DATA.getStage(c.age);
     const maxEv = stage === 'infant' ? 1 : stage === 'child' ? 2 : 3;
@@ -151,6 +210,11 @@ const Engine = (() => {
     });
     if (c.assets.investments > 0) {
       c.assets.investments = Math.round(c.assets.investments * (1 + Math.random() * 0.2 - 0.05));
+    }
+    // Bank savings interest
+    if (c.bank?.savings > 0) {
+      const interest = Math.round(c.bank.savings * (c.bank.apy || 0.035));
+      c.bank.savings += interest;
     }
   }
 
@@ -368,6 +432,10 @@ const Engine = (() => {
         const p = State.getPartner();
         if (p) { p.status = 'divorced'; p.type = 'ex'; State.addLog(c.age, `Divorced ${p.name}.`, 'bad'); }
       }
+      if (choice.marry) { triggerMood('in_love', 4); }
+      if (choice.breakUp || choice.divorce) { triggerMood('heartbroken', 3); }
+      if (choice.retire) { triggerMood('content', 3); }
+      if (choice.addPartner) { triggerMood('in_love', 3); }
       if (choice.addPartner) {
         const gen = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender === 'male' ? 'female' : 'male');
         const nm  = DATA.randomName(gen);
@@ -409,7 +477,13 @@ const Engine = (() => {
         else { c.money -= 20; State.addLog(c.age, 'Lottery ticket was a dud.', 'event'); }
         return;
       }
-      if (event.fireSelf) { quitJob(true); }
+      if (event.fireSelf) { quitJob(true); triggerMood('anxious', 2); }
+      // Market crash — tank investments
+      if (event.sellInvestments) { const lost = Math.round(c.assets.investments * 0.6); c.assets.investments -= lost; State.addLog(c.age, `Sold investments at a loss: -${DATA.fmtMoney(lost)}.`, 'bad'); }
+      if (event.buyDip) { c.assets.investments += 5000; }
+      // Condition events
+      if (event.id === 'diagnosed_anxiety' && !c.conditions.includes('anxiety')) c.conditions.push('anxiety');
+      if (event.id === 'back_injury' && !c.conditions.includes('back_pain')) c.conditions.push('back_pain');
       if (event.addFriend) {
         const fg  = Math.random() < 0.5 ? 'female' : 'male';
         const fnm = DATA.randomName(fg);
@@ -487,6 +561,11 @@ const Engine = (() => {
     if (lvl === 'bachelor') { nextLevel = 'master';   duration = 2; baseCost = 40000; }
     if (lvl === 'master')   { nextLevel = 'doctorate'; duration = 4; baseCost = 60000; }
     if (lvl === 'doctorate') return { ok:false, msg:'Already have the highest degree.' };
+    if ((c.education.gpa || 2.5) < 2.0) return { ok:false, msg:'GPA too low for university (need 2.0+). Study hard first.' };
+    // Scholarship: GPA 3.5+ = 50% off
+    if ((c.education.gpa || 2.5) >= 3.5) {
+      baseCost = Math.round(baseCost * 0.5);
+    }
     const institutions = ['State University','City College','Northern University','Westbrook College','Pacific University'];
     c.education.inSchool = true; c.education.schoolType = 'university';
     c.education.schoolYear = 0; c.education.schoolDuration = duration;
@@ -586,11 +665,17 @@ const Engine = (() => {
     const g = State.get(); const c = g.character;
     const rel = g.relationships.find(r => r.id === relId);
     if (!rel || rel.status !== 'active') return { ok:false, msg:'Not available.' };
+    // Energy check for social actions
+    const energyFreeActions = ['argue', 'compliment'];
+    if (!energyFreeActions.includes(action) && !hasEnergy()) {
+      return { ok:false, msg:'No energy left. Age up to rest.' };
+    }
     let msg = '';
     switch(action) {
       case 'spend_time':
         rel.relationship = Math.min(100, rel.relationship + 10);
         State.applyEffects({ happiness:8 });
+        spendEnergy();
         msg = `Spent quality time with ${rel.name}.`; break;
       case 'compliment':
         rel.relationship = Math.min(100, rel.relationship + 8);
@@ -598,6 +683,7 @@ const Engine = (() => {
       case 'gift':
         if (c.money < 100) return { ok:false, msg:'Need $100 for a gift.' };
         c.money -= 100; rel.relationship = Math.min(100, rel.relationship + 15);
+        spendEnergy();
         msg = `Gave ${rel.name} a gift. They were touched.`; break;
       case 'argue':
         rel.relationship = Math.max(0, rel.relationship - 15);
@@ -608,18 +694,267 @@ const Engine = (() => {
         if (rel.type !== 'partner') return { ok:false, msg:'Not a partner.' };
         if (c.money < 80) return { ok:false, msg:'Need $80 for a date.' };
         c.money -= 80; rel.relationship = Math.min(100, rel.relationship + 12);
-        State.applyEffects({ happiness:10 }); msg = `Had a wonderful date with ${rel.name}.`; break;
+        State.applyEffects({ happiness:10 }); spendEnergy();
+        msg = `Had a wonderful date with ${rel.name}.`; break;
+      case 'weekend_getaway':
+        if (rel.type !== 'partner') return { ok:false, msg:'Not a partner.' };
+        if (c.money < 400) return { ok:false, msg:'Need $400 for a getaway.' };
+        c.money -= 400; rel.relationship = Math.min(100, rel.relationship + 22);
+        State.applyEffects({ happiness:18 }); spendEnergy();
+        msg = `Had a magical weekend getaway with ${rel.name}.`; break;
+      case 'love_letter':
+        if (rel.type !== 'partner' && rel.subtype !== 'crush') return { ok:false, msg:'Only for romantic interests.' };
+        rel.relationship = Math.min(100, rel.relationship + 14);
+        State.applyEffects({ happiness:8 }); spendEnergy();
+        msg = `Wrote a heartfelt love letter to ${rel.name}.`; break;
+      case 'cook_dinner':
+        if (rel.type !== 'partner') return { ok:false, msg:'Not a partner.' };
+        if (c.money < 60) return { ok:false, msg:'Need $60 for ingredients.' };
+        c.money -= 60; rel.relationship = Math.min(100, rel.relationship + 16);
+        State.applyEffects({ happiness:12 }); spendEnergy();
+        msg = `Cooked a special dinner for ${rel.name}. They loved it.`; break;
+      case 'serenade':
+        if (rel.type !== 'partner' && rel.subtype !== 'crush') return { ok:false, msg:'Only for romantic interests.' };
+        const hasMusicHobby = c.hobbies.find(h => h.id === 'music');
+        const serenadeBoost = hasMusicHobby ? 20 : 10;
+        rel.relationship = Math.min(100, rel.relationship + serenadeBoost);
+        State.applyEffects({ happiness:10 + (hasMusicHobby ? 5 : 0) }); spendEnergy();
+        msg = hasMusicHobby ? `Serenaded ${rel.name} beautifully — music skill shone through!` : `Serenaded ${rel.name}. Charming effort!`; break;
       case 'propose':
         if (rel.type !== 'partner') return { ok:false, msg:'Not a partner.' };
         if (rel.relationship < 60) return { ok:false, msg:'Relationship too low (need 60).' };
+        if (c.age < 18) return { ok:false, msg:'Must be 18 to propose.' };
         rel.subtype = 'spouse'; rel.marriedAge = c.age;
         State.applyEffects({ happiness:25 });
         msg = `Proposed to ${rel.name} — they said yes!`;
         State.unlockAchievement('happily_ever_after'); break;
+      case 'plan_wedding':
+        return { ok:true, showWeddingPlanner:true, rel }; // handled by UI
       default: return { ok:false, msg:'Unknown action.' };
     }
     State.addLog(c.age, msg, 'rel'); State.saveGame();
     return { ok:true, msg };
+  }
+
+  function planWedding(relId, venue) {
+    const VENUES = {
+      city_hall:    { name:'City Hall',     cost:500,    happiness:15 },
+      garden:       { name:'Garden Party',  cost:5000,   happiness:25 },
+      beach:        { name:'Beach Wedding', cost:8000,   happiness:30 },
+      luxury_hotel: { name:'Luxury Hotel',  cost:20000,  happiness:40 },
+    };
+    const g = State.get(); const c = g.character;
+    const v = VENUES[venue];
+    if (!v) return { ok:false, msg:'Unknown venue.' };
+    if (c.money < v.cost) return { ok:false, msg:`Need ${DATA.fmtMoney(v.cost)} for this venue.` };
+    c.money -= v.cost;
+    const rel = g.relationships.find(r => r.id === relId);
+    const name = rel ? rel.name : 'your partner';
+    State.applyEffects({ happiness:v.happiness });
+    State.addLog(c.age, `Wedding at ${v.name} with ${name}. Beautiful day.`, 'rel');
+    State.saveGame();
+    return { ok:true, msg:`Married at ${v.name}!` };
+  }
+
+  // ── Ask a friend out ──────────────────────────────────────────
+  function askFriendOut(relId) {
+    const g = State.get(); const c = g.character;
+    const rel = g.relationships.find(r => r.id === relId);
+    if (!rel || rel.status !== 'active') return { ok:false, msg:'Not available.' };
+    if (rel.type !== 'friend') return { ok:false, msg:'Only for friends.' };
+    if (c.age < 12) return { ok:false, msg:'Too young for romance.' };
+    if (c.sexuality === 'asexual') return { ok:false, msg:'Romance is not really your thing.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    // Success chance based on relationship level
+    const chance = rel.relationship / 100 * 0.7 + 0.1;
+    const success = Math.random() < chance;
+    spendEnergy();
+    if (success) {
+      rel.type = 'partner'; rel.subtype = 'partner';
+      State.applyEffects({ happiness:18 });
+      State.addLog(c.age, `Asked ${rel.name} out — they said yes!`, 'rel');
+      State.saveGame();
+      return { ok:true, msg:`${rel.name} said yes! You are now together.` };
+    } else {
+      rel.relationship = Math.max(0, rel.relationship - 10);
+      State.applyEffects({ happiness:-8 });
+      State.addLog(c.age, `Asked ${rel.name} out — they said no. Awkward.`, 'rel');
+      State.saveGame();
+      return { ok:true, msg:`${rel.name} said no. Things are a bit awkward now.`, rejected:true };
+    }
+  }
+
+  // ── Plan a child (explicit choice) ───────────────────────────
+  function planChild(name, gender) {
+    const g = State.get(); const c = g.character;
+    const partner = State.getPartner();
+    if (!partner) return { ok:false, msg:'Need a partner.' };
+    if (c.age < 18 || c.age > 50) return { ok:false, msg:'Not the right time.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    const resolvedGender = (gender === 'random' || !gender) ? (Math.random() < 0.5 ? 'female' : 'male') : gender;
+    const autoName = resolvedGender === 'female'
+      ? DATA.randomFrom(DATA.FEMALE_NAMES)
+      : DATA.randomFrom(DATA.MALE_NAMES);
+    const childName = (name && name.trim()) ? name.trim() : autoName;
+    const fullName  = `${childName} ${c.lastName}`;
+    const rel = State.addRelationship({ name:fullName, type:'family', subtype:'child', age:0, relationship:80, traits:DATA.randomTraits(2), status:'active' });
+    State.applyEffects({ happiness:20, money:-5000 });
+    spendEnergy();
+    State.addLog(c.age, `${rel.name} was born! Welcome to the world.`, 'rel');
+    State.unlockAchievement('parent');
+    State.saveGame();
+    return { ok:true, msg:`${rel.name} is born!`, name:rel.name };
+  }
+
+  // ── Items ─────────────────────────────────────────────────────
+  function buyItem(itemId) {
+    const c = State.getChar();
+    const item = DATA.getItem(itemId);
+    if (!item) return { ok:false, msg:'Unknown item.' };
+    if (!item.consumable && c.items.includes(itemId)) return { ok:false, msg:'You already own this.' };
+    if (c.money < item.cost) return { ok:false, msg:`Need ${DATA.fmtMoney(item.cost)}.` };
+    c.money -= item.cost;
+    // Consumable: apply stat boosts immediately, don't keep in inventory
+    if (item.consumable) {
+      if (item.statBoost) State.applyEffects(item.statBoost);
+      State.addLog(c.age, `Read/used ${item.name}.${Object.keys(item.statBoost||{}).length ? ' Gained stats!' : ''}`, 'activity');
+    } else {
+      c.items.push(itemId);
+      if (item.statBoost && Object.keys(item.statBoost).length) State.applyEffects(item.statBoost);
+      State.addLog(c.age, `Bought ${item.name}.${item.hobbyBoost ? ` Boosts ${DATA.getHobby(item.hobbyBoost)?.name} practice.` : ''}`, 'activity');
+    }
+    State.saveGame();
+    return { ok:true, msg: item.consumable ? `Used ${item.name}!` : `Bought ${item.name}!` };
+  }
+
+  // ── Study actions (Education modal) ──────────────────────────
+  function studyHard() {
+    const c = State.getChar();
+    if (c.age < 6 || c.age > 25) return { ok:false, msg:'Not in school.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    const smartsGain = 5 + Math.floor(Math.random() * 5);
+    State.applyEffects({ smarts:smartsGain, happiness:-3, health:-2 });
+    c.education.gpa = Math.min(4.0, +(((c.education.gpa || 2.5) + 0.15).toFixed(2)));
+    spendEnergy();
+    State.addLog(c.age, `Studied hard. Smarts +${smartsGain}. GPA ${c.education.gpa.toFixed(2)}.`, 'edu');
+    State.saveGame();
+    return { ok:true, msg:`Studied hard. +${smartsGain} Smarts. GPA now ${c.education.gpa.toFixed(2)}.` };
+  }
+
+  function skipClass() {
+    const c = State.getChar();
+    if (c.age < 6 || c.age > 18) return { ok:false, msg:'Only during school years.' };
+    // No energy cost — you are doing nothing!
+    const caught = Math.random() < 0.3;
+    if (caught) {
+      State.applyEffects({ happiness:-8, smarts:-3 });
+      c.education.gpa = Math.max(0, +(((c.education.gpa || 2.5) - 0.3).toFixed(2)));
+      State.addLog(c.age, `Skipped class and got caught. Detention. GPA ${c.education.gpa.toFixed(2)}.`, 'bad');
+      State.saveGame();
+      return { ok:true, msg:`Got caught! Detention. GPA dropped to ${c.education.gpa.toFixed(2)}.`, caught:true };
+    }
+    State.applyEffects({ happiness:10, smarts:-3 });
+    c.education.gpa = Math.max(0, +(((c.education.gpa || 2.5) - 0.15).toFixed(2)));
+    State.addLog(c.age, `Skipped class. Freedom! GPA ${c.education.gpa.toFixed(2)}.`, 'activity');
+    State.saveGame();
+    return { ok:true, msg:'Got away with it! Happiness up but smarts took a hit.' };
+  }
+
+  function kissUpTeacher() {
+    const c = State.getChar();
+    if (c.age < 6 || c.age > 18) return { ok:false, msg:'Only during school years.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    const roll = Math.random();
+    spendEnergy();
+    if (roll < 0.5) {
+      State.applyEffects({ smarts:4, happiness:3 });
+      State.addLog(c.age, 'Made a good impression on the teacher. Grade boosted.', 'edu');
+      State.saveGame();
+      return { ok:true, msg:'Teacher liked you! Smarts and happiness up.' };
+    } else {
+      State.applyEffects({ happiness:-5 });
+      State.addLog(c.age, 'Tried to impress the teacher. Classmates were not impressed.', 'event');
+      State.saveGame();
+      return { ok:true, msg:'Classmates side-eye you for being a teacher\'s pet. Happiness down a little.', embarrassing:true };
+    }
+  }
+
+  function flirtWithClassmate() {
+    const c = State.getChar();
+    if (c.age < 12 || c.age > 18) return { ok:false, msg:'Only during school teen years.' };
+    if (c.sexuality === 'asexual') return { ok:false, msg:'Not really your thing.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    const gen = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender === 'male' ? 'female' : 'male');
+    const nm  = DATA.randomName(gen);
+    const roll = Math.random();
+    spendEnergy();
+    if (roll < 0.55) {
+      const rel = State.addRelationship({ name:nm.full, type:'friend', subtype:'crush', age:c.age, relationship:60, traits:DATA.randomTraits(2), status:'active' });
+      State.applyEffects({ happiness:12 });
+      State.addLog(c.age, `Flirted with ${rel.name} in class. Sparks!`, 'rel');
+      State.saveGame();
+      return { ok:true, msg:`${rel.name} seems interested! New crush added.` };
+    } else {
+      State.applyEffects({ happiness:-5 });
+      State.addLog(c.age, 'Tried flirting in class. Crashed and burned.', 'event');
+      State.saveGame();
+      return { ok:true, msg:'Did not go well. Happiness down a bit.', rejected:true };
+    }
+  }
+
+  function cramAllNight() {
+    const c = State.getChar();
+    if (c.age < 18 || !c.education.inSchool) return { ok:false, msg:'Only while at university.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    const gain = 10 + Math.floor(Math.random() * 8);
+    State.applyEffects({ smarts:gain, health:-8, happiness:-5 });
+    spendEnergy();
+    State.addLog(c.age, `Crammed all night. Smarts +${gain} but exhausted.`, 'edu');
+    State.saveGame();
+    return { ok:true, msg:`+${gain} Smarts! But your health and mood took a hit.` };
+  }
+
+  function seduceProfessor() {
+    const c = State.getChar();
+    if (c.age < 18 || !c.education.inSchool) return { ok:false, msg:'Only at university.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    const roll = Math.random();
+    spendEnergy();
+    if (roll < 0.2) {
+      // Big success — inappropriate but game
+      State.applyEffects({ smarts:5, happiness:10 });
+      State.addLog(c.age, 'The professor was... receptive. Grade improved significantly.', 'event');
+      State.saveGame();
+      return { ok:true, msg:'It worked. Questionably, but it worked. Grade boosted!' };
+    } else if (roll < 0.6) {
+      State.applyEffects({ happiness:-10, smarts:-5 });
+      State.addLog(c.age, 'Professor rejected the advance and reported it. Scandalous.', 'bad');
+      State.saveGame();
+      return { ok:true, msg:'Complete disaster. Reported to the dean. Happiness and smarts way down.', scandal:true };
+    } else {
+      State.applyEffects({ happiness:-5 });
+      State.addLog(c.age, 'Tried to charm the professor. They pretended not to notice.', 'event');
+      State.saveGame();
+      return { ok:true, msg:'They pretended it did not happen. Awkward.' };
+    }
+  }
+
+  function cheatOnExam() {
+    const c = State.getChar();
+    if (c.age < 6 || !c.education.inSchool) return { ok:false, msg:'Only while enrolled in school.' };
+    const roll = Math.random();
+    if (roll < 0.35) {
+      // Caught
+      State.applyEffects({ smarts:-10, happiness:-15 });
+      if (Math.random() < 0.4) c.education.inSchool = false; // expelled
+      State.addLog(c.age, 'Caught cheating on an exam. Serious consequences.', 'bad');
+      State.saveGame();
+      return { ok:true, msg:'Caught cheating! Suspension or worse. Big smarts and happiness hit.', caught:true };
+    }
+    State.applyEffects({ smarts:8, happiness:5 });
+    State.addLog(c.age, 'Cheated on the exam. Got away with it.', 'event');
+    State.saveGame();
+    return { ok:true, msg:'Got away with it. For now.' };
   }
 
   // ── Activity actions ──────────────────────────────────────────
@@ -628,11 +963,13 @@ const Engine = (() => {
     const act = DATA.ACTIVITIES.find(a => a.id === actId);
     if (!act) return { ok:false, msg:'Unknown activity.' };
     if (c.age < (act.minAge||0)) return { ok:false, msg:`Must be ${act.minAge}+.` };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest and recharge.' };
     if (act.casino) return { ok:true, casino:true };
     if (act.stocks) { if(c.money<500) return{ok:false,msg:'Need $500 to invest.'}; return invest(Math.min(c.money,Math.round(c.money*0.3)),'stocks'); }
     if (act.crypto) { if(c.money<200) return{ok:false,msg:'Need $200.'}; return invest(Math.min(c.money,Math.round(c.money*0.2)),'crypto'); }
     if (act.cost > 0 && c.money < act.cost) return { ok:false, msg:`Need ${DATA.fmtMoney(act.cost)}.` };
     if (act.cost > 0) c.money -= act.cost;
+    spendEnergy();
     const eff = { ...act.effects };
     if (act.artisticBonus && DATA.getCareer(c.career.jobId||'')?.category === 'artistic') {
       c.fame = State.clampStat((c.fame||0) + 3); eff.happiness = (eff.happiness||0) + 5;
@@ -649,7 +986,9 @@ const Engine = (() => {
     if (!hDef) return { ok:false, msg:'Unknown hobby.' };
     if (c.age < hDef.minAge) return { ok:false, msg:`Must be ${hDef.minAge}+ to start this hobby.` };
     if (c.hobbies.find(h => h.id === hobbyId)) return { ok:false, msg:'Already doing this hobby.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
     c.hobbies.push({ id:hobbyId, skillLevel:0, yearsPracticed:0 });
+    spendEnergy();
     State.addLog(c.age, `Started hobby: ${hDef.name}.`, 'activity');
     State.saveGame();
     return { ok:true, msg:`Started ${hDef.name}!` };
@@ -661,8 +1000,13 @@ const Engine = (() => {
     if (!hEntry) return { ok:false, msg:'You do not have this hobby yet.' };
     const hDef = DATA.getHobby(hobbyId);
     if (!hDef) return { ok:false, msg:'Unknown hobby.' };
-    const gain = 8 + Math.floor(Math.random() * 7); // 8–14 per session
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    // Item boost: owning the matching item gives +40% skill gain
+    const matchItem = DATA.ITEMS.find(it => it.hobbyBoost === hobbyId && c.items.includes(it.id));
+    const baseGain  = 8 + Math.floor(Math.random() * 7);
+    const gain      = matchItem ? Math.round(baseGain * 1.4) : baseGain;
     hEntry.skillLevel = Math.min(100, hEntry.skillLevel + gain);
+    spendEnergy();
     hEntry.yearsPracticed++;
     // Apply stat gains (active practice = full amount)
     const gains = hDef.statGains;
@@ -675,7 +1019,8 @@ const Engine = (() => {
     if (career?.category === 'artistic' && hDef.careerBoost.includes(c.career.jobId||'')) {
       c.fame = State.clampStat((c.fame||0) + 2);
     }
-    State.addLog(c.age, `Practiced ${hDef.name}. Skill: ${hEntry.skillLevel}.`, 'activity');
+    const itemNote = matchItem ? ` (${DATA.getItem(matchItem.id)?.name} boost!)` : '';
+    State.addLog(c.age, `Practiced ${hDef.name}. Skill: ${hEntry.skillLevel}.${itemNote}`, 'activity');
     State.saveGame();
     return { ok:true, skillLevel: hEntry.skillLevel };
   }
@@ -687,7 +1032,9 @@ const Engine = (() => {
     if (!def) return { ok:false, msg:'Unknown activity.' };
     if (c.age < def.minAge || c.age > def.maxAge) return { ok:false, msg:`Available ages ${def.minAge}–${def.maxAge}.` };
     if (c.extracurriculars.find(e => e.id === extId)) return { ok:false, msg:'Already joined.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
     c.extracurriculars.push({ id:extId, skillLevel:0, yearsParticipated:0 });
+    spendEnergy();
     State.addLog(c.age, `Joined ${def.name}.`, 'activity');
     State.saveGame();
     return { ok:true, msg:`Joined ${def.name}!` };
@@ -699,6 +1046,7 @@ const Engine = (() => {
     if (!entry) return { ok:false, msg:'Not in this activity.' };
     const def = DATA.getExtracurricular(extId);
     if (!def) return { ok:false, msg:'Unknown activity.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
     // Skill gain — bigger if matching hobby exists
     const hobbyMatch = c.hobbies.find(h => def.hobbyBoost.includes(h.id));
     const skillGain = hobbyMatch ? 12 + Math.floor(Math.random()*8) : 7 + Math.floor(Math.random()*6);
@@ -711,6 +1059,7 @@ const Engine = (() => {
     if (gains.looks)     c.looks     = State.clampStat(c.looks     + gains.looks);
     const note = hobbyMatch ? ` (hobby bonus from ${DATA.getHobby(hobbyMatch.id)?.name}!)` : '';
     State.addLog(c.age, `Participated in ${def.name}. Skill: ${entry.skillLevel}.${note}`, 'activity');
+    spendEnergy();
     State.saveGame();
     return { ok:true, skillLevel:entry.skillLevel, hobbyBoost:!!hobbyMatch };
   }
@@ -719,10 +1068,12 @@ const Engine = (() => {
   function socializeAtSchool() {
     const c = State.getChar();
     if (c.age < 6 || c.age > 18) return { ok:false, msg:'Only available during school years.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
     const fg  = Math.random() < 0.5 ? 'female' : 'male';
     const fnm = DATA.randomName(fg);
     const rel = State.addRelationship({ name:fnm.full, type:'friend', subtype:'friend', age:c.age + Math.floor(Math.random()*3)-1, relationship:55, traits:DATA.randomTraits(2), status:'active' });
     State.applyEffects({ happiness:6 });
+    spendEnergy();
     State.addLog(c.age, `Made a new friend at school: ${rel.name}.`, 'rel');
     State.saveGame();
     return { ok:true, msg:`Met ${rel.name}!` };
@@ -734,6 +1085,7 @@ const Engine = (() => {
     if (c.sexuality === 'asexual') return { ok:false, msg:'Romance is not really your thing.' };
     const alreadyHasPartner = State.getPartner();
     if (alreadyHasPartner) return { ok:false, msg:'Already in a relationship.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
     const gen = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender === 'male' ? 'female' : 'male');
     const nm  = DATA.randomName(gen);
     const isTeen = c.age < 18;
@@ -743,9 +1095,531 @@ const Engine = (() => {
     });
     const msg = isTeen ? `Developed a crush on ${rel.name}.` : `Started seeing ${rel.name}.`;
     State.applyEffects({ happiness:10 });
+    spendEnergy();
     State.addLog(c.age, msg, 'rel');
     State.saveGame();
     return { ok:true, msg, name:rel.name };
+  }
+
+  // ── Mental health drift ───────────────────────────────────────
+  function applyMentalHealthDrift(c, g) {
+    let drift = (75 - (c.mentalHealth ?? 80)) * 0.04; // pulls toward 75
+    // Positive: active relationships, high happiness
+    if (c.happiness > 70) drift += 1;
+    if (g.relationships.filter(r => r.type==='friend'&&r.status==='active').length > 2) drift += 0.5;
+    if (c.hobbies.length > 0) drift += 0.5;
+    if (c.pet?.alive) drift += 1;
+    // Negative: isolation, low happiness, old age stress
+    if (c.happiness < 30) drift -= 3;
+    if (c.age > 60 && c.health < 40) drift -= 1;
+    // Career burnout
+    if (c.career.jobId && c.career.performance < 30) drift -= 1;
+    c.mentalHealth = State.clampStat((c.mentalHealth ?? 80) + drift + (Math.random() * 4 - 2));
+  }
+
+  // ── Pets ─────────────────────────────────────────────────────
+  function adoptPet(petTypeId, petName) {
+    const c = State.getChar();
+    if (c.pet && c.pet.alive) return { ok:false, msg:'You already have a pet.' };
+    const def = DATA.getPet(petTypeId);
+    if (!def) return { ok:false, msg:'Unknown pet type.' };
+    if (c.money < def.adoptCost) return { ok:false, msg:`Need ${DATA.fmtMoney(def.adoptCost)} to adopt.` };
+    const name = (petName && petName.trim()) ? petName.trim() : `Little ${def.name}`;
+    c.money -= def.adoptCost;
+    c.pet = { type: petTypeId, name, age: 0, health: 100, alive: true, sick: false };
+    State.applyEffects({ happiness:8, mentalHealth:5 });
+    State.addLog(c.age, `Adopted ${name} the ${def.name}.`, 'activity');
+    State.saveGame();
+    return { ok:true, msg:`Welcome home, ${name}!` };
+  }
+
+  function vetPet() {
+    const c = State.getChar();
+    if (!c.pet || !c.pet.alive) return { ok:false, msg:'No pet to take to the vet.' };
+    const def = DATA.getPet(c.pet.type);
+    if (!c.pet.sick && c.pet.health >= 80) return { ok:false, msg:`${c.pet.name} is healthy!` };
+    if (c.money < def.vetCost) return { ok:false, msg:`Need ${DATA.fmtMoney(def.vetCost)} for the vet.` };
+    c.money -= def.vetCost;
+    c.pet.health = Math.min(100, c.pet.health + 40);
+    c.pet.sick = false;
+    State.addLog(c.age, `Took ${c.pet.name} to the vet. They are feeling better.`, 'activity');
+    State.saveGame();
+    return { ok:true, msg:`${c.pet.name} is feeling much better!` };
+  }
+
+  function playWithPet() {
+    const c = State.getChar();
+    if (!c.pet || !c.pet.alive) return { ok:false, msg:'No pet to play with.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left.' };
+    const def = DATA.getPet(c.pet.type);
+    State.applyEffects({ happiness: def.happinessBonus + 3, mentalHealth: 3 });
+    spendEnergy();
+    State.addLog(c.age, `Played with ${c.pet.name}. Pure joy.`, 'activity');
+    State.saveGame();
+    return { ok:true, msg:`Quality time with ${c.pet.name}. Happiness up!` };
+  }
+
+  function processPetAging(c, g) {
+    if (!c.pet || !c.pet.alive) return;
+    const def = DATA.getPet(c.pet.type);
+    c.pet.age++;
+    // Passive happiness boost each year
+    State.applyEffects({ happiness: Math.round(def.happinessBonus * 0.3), mentalHealth: 0.5 });
+    // Chance of illness
+    const sickChance = 0.08 + (c.pet.age / def.lifespan) * 0.1;
+    if (!c.pet.sick && Math.random() < sickChance) {
+      c.pet.sick = true;
+      c.pet.health = Math.max(10, c.pet.health - 30);
+      State.addLog(c.age, `${c.pet.name} is not feeling well. Consider visiting the vet.`, 'bad');
+      UI.showToast(`${c.pet.name} is sick! Visit the vet.`, 'bad');
+    }
+    // Death check
+    const deathChance = c.pet.age >= def.lifespan ? 0.4 + (c.pet.age - def.lifespan) * 0.2 : (c.pet.sick && c.pet.health < 20) ? 0.2 : 0;
+    if (Math.random() < deathChance) {
+      c.pet.alive = false;
+      State.applyEffects({ happiness:-15, mentalHealth:-12 });
+      State.addLog(c.age, `${c.pet.name} passed away. You grieve deeply.`, 'bad');
+      UI.showToast(`${c.pet.name} has passed. They will be missed.`, 'bad');
+    }
+  }
+
+  // ── Social media ──────────────────────────────────────────────
+  function doSocialMedia(postType) {
+    const c = State.getChar();
+    if (c.age < 13) return { ok:false, msg:'Too young for social media.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    const roll = Math.random();
+    let fameGain = 0, happGain = 0, msg = '';
+    if (roll < 0.08) {
+      // Viral
+      const bonus = postType === 'art' || postType === 'music' ? 15 : 8;
+      fameGain = 10 + bonus; happGain = 18;
+      msg = 'Your post went completely viral! Follower count exploding.';
+    } else if (roll < 0.3) {
+      fameGain = 4; happGain = 8;
+      msg = 'Post got a lot of attention. Nice engagement!';
+    } else if (roll < 0.85) {
+      fameGain = 1; happGain = 3;
+      msg = 'Decent engagement. A few likes and comments.';
+    } else {
+      fameGain = 0; happGain = -5;
+      msg = 'Post got some negative comments. Scrolled too long. Happiness down.';
+    }
+    State.applyEffects({ fame:fameGain, happiness:happGain });
+    spendEnergy();
+    State.addLog(c.age, `Social media: ${msg}`, 'activity');
+    State.saveGame();
+    return { ok:true, msg, viral: fameGain >= 10 };
+  }
+
+  // ── Side hustles ──────────────────────────────────────────────
+  function doSideHustle(hustleId) {
+    const c = State.getChar();
+    if (c.age < 16) return { ok:false, msg:'Must be 16+ for side work.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    const sh = DATA.getSideHustle(hustleId);
+    if (!sh) return { ok:false, msg:'Unknown hustle.' };
+    if (sh.minSmarts && c.smarts < sh.minSmarts) return { ok:false, msg:`Need ${sh.minSmarts} Smarts.` };
+    const hobby = sh.hobbyReq ? c.hobbies.find(h => h.id === sh.hobbyReq) : null;
+    if (sh.hobbyReq && (!hobby || hobby.skillLevel < sh.minSkill)) {
+      return { ok:false, msg:`Need ${sh.hobbyReq} hobby at skill ${sh.minSkill}+.` };
+    }
+    const skillFactor = hobby ? hobby.skillLevel / 100 : 0.3;
+    const [minI, maxI] = sh.incomeRange;
+    const income = Math.round((minI + (maxI - minI) * skillFactor) * (0.7 + Math.random() * 0.6));
+    c.money += income;
+    spendEnergy();
+    State.addLog(c.age, `${sh.name}: earned ${DATA.fmtMoney(income)}.`, 'career');
+    State.saveGame();
+    return { ok:true, msg:`Earned ${DATA.fmtMoney(income)} from ${sh.name}!`, income };
+  }
+
+  // ── Travel ────────────────────────────────────────────────────
+  function travel(destinationId) {
+    const c = State.getChar();
+    if (c.age < 18) return { ok:false, msg:'Must be 18+ to travel abroad.' };
+    if (!hasEnergy(2)) return { ok:false, msg:'Need 2 energy for a trip.' };
+    const dest = DATA.getTravelDest(destinationId);
+    if (!dest) return { ok:false, msg:'Unknown destination.' };
+    if (c.money < dest.cost) return { ok:false, msg:`Need ${DATA.fmtMoney(dest.cost)} for this trip.` };
+    c.money -= dest.cost;
+    State.applyEffects(dest.effects);
+    spendEnergy(2);
+    if (!c.travelStamps.includes(destinationId)) c.travelStamps.push(destinationId);
+    const firstTime = c.travelStamps.length === 1;
+    State.addLog(c.age, `Traveled to ${dest.name}. Life-changing.`, 'activity');
+    if (firstTime) State.addLog(c.age, 'First trip abroad! The world is bigger than you imagined.', 'good');
+    State.saveGame();
+    return { ok:true, msg:`Incredible trip to ${dest.name}!${firstTime ? ' First stamp in your passport!' : ''}`, stamps: c.travelStamps.length };
+  }
+
+  // ── Parent health checks ──────────────────────────────────────
+  function checkParentHealth(c, g) {
+    g.relationships.forEach(rel => {
+      if ((rel.subtype !== 'father' && rel.subtype !== 'mother') || rel.status !== 'active') return;
+      // Chance of parent dying based on age
+      const pAge = rel.age;
+      if (pAge < 65) return;
+      const deathChance = pAge < 75 ? 0.02 : pAge < 85 ? 0.06 : pAge < 95 ? 0.14 : 0.28;
+      if (Math.random() < deathChance) {
+        rel.status = 'deceased';
+        // Inheritance
+        const inheritance = Math.round(20000 + Math.random() * 80000);
+        c.money += inheritance;
+        State.applyEffects({ happiness:-20, mentalHealth:-15 });
+        State.addLog(c.age, `${rel.name} passed away at age ${pAge}. You inherited ${DATA.fmtMoney(inheritance)}.`, 'bad');
+        UI.showToast(`${rel.name} has passed away. They will always be in your heart.`, 'bad');
+      }
+    });
+  }
+
+  // ── Mood system ───────────────────────────────────────────────
+  function triggerMood(moodId, duration = 2) {
+    const c = State.getChar();
+    const mood = DATA.getMood(moodId);
+    if (!mood) return;
+    c.mood = { id:moodId, name:mood.name, color:mood.color, desc:mood.desc, turnsLeft:duration };
+    State.saveGame();
+  }
+
+  function applyMoodDrift(c) {
+    if (!c.mood) return;
+    c.mood.turnsLeft--;
+    if (c.mood.turnsLeft <= 0) { c.mood = null; return; }
+    const moodDef = DATA.getMood(c.mood.id);
+    if (!moodDef) return;
+    for (const [stat, mod] of Object.entries(moodDef.statMod)) {
+      const delta = mod * 3; // mood nudges stats by up to ~3 per year
+      if (stat === 'mentalHealth') c.mentalHealth = State.clampStat((c.mentalHealth || 80) + delta);
+      else if (stat in c) c[stat] = State.clampStat(c[stat] + delta);
+    }
+  }
+
+  // ── Health conditions ─────────────────────────────────────────
+  function processConditions(c) {
+    c.conditions.forEach(condId => {
+      const cond = DATA.getCondition(condId);
+      if (!cond) return;
+      // Drain stats (managed = 70% reduction, not tracked here — manage is active)
+      for (const [stat, val] of Object.entries(cond.drain)) {
+        if (stat === 'mentalHealth') c.mentalHealth = State.clampStat((c.mentalHealth || 80) + val);
+        else if (stat in c) c[stat] = State.clampStat(c[stat] + val);
+      }
+    });
+  }
+
+  function manageCondition(condId) {
+    const c = State.getChar();
+    const cond = DATA.getCondition(condId);
+    if (!cond) return { ok:false, msg:'Unknown condition.' };
+    if (!c.conditions.includes(condId)) return { ok:false, msg:'You do not have this condition.' };
+    if (c.money < cond.manageCost) return { ok:false, msg:`Need ${DATA.fmtMoney(cond.manageCost)} for treatment.` };
+    c.money -= cond.manageCost;
+    // Restore the drained stats for this year
+    for (const [stat, val] of Object.entries(cond.drain)) {
+      const restore = Math.abs(val) * 1.5;
+      if (stat === 'mentalHealth') c.mentalHealth = State.clampStat((c.mentalHealth || 80) + restore);
+      else if (stat in c) c[stat] = State.clampStat(c[stat] + restore);
+    }
+    State.addLog(c.age, `Managed ${cond.name}. Feeling better this year.`, 'activity');
+    State.saveGame();
+    return { ok:true, msg:`Managed ${cond.name}. Stats restored for this year.` };
+  }
+
+  // ── Social Circles ────────────────────────────────────────────
+  function addToCircle(relId) {
+    const c = State.getChar();
+    const rel = State.get().relationships.find(r => r.id === relId);
+    if (!rel || rel.status !== 'active') return { ok:false, msg:'Not available.' };
+    if (c.socialCircle.includes(relId)) return { ok:false, msg:'Already in your circle.' };
+    if (c.socialCircle.length >= 6) return { ok:false, msg:'Circle is full (max 6).' };
+    c.socialCircle.push(relId);
+    State.addLog(c.age, `Added ${rel.name} to your social circle.`, 'rel');
+    State.saveGame();
+    return { ok:true, msg:`${rel.name} is now in your circle!` };
+  }
+
+  function removeFromCircle(relId) {
+    const c = State.getChar();
+    c.socialCircle = c.socialCircle.filter(id => id !== relId);
+    State.saveGame();
+    return { ok:true };
+  }
+
+  function groupHangout() {
+    const g = State.get(); const c = g.character;
+    const members = c.socialCircle
+      .map(id => g.relationships.find(r => r.id === id && r.status === 'active'))
+      .filter(Boolean);
+    if (members.length < 2) return { ok:false, msg:'Need at least 2 active people in your circle.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    // Boost all circle relationships
+    members.forEach(rel => { rel.relationship = Math.min(100, rel.relationship + 8); });
+    const happBoost = 10 + members.length * 2;
+    State.applyEffects({ happiness: happBoost, mentalHealth: 5 });
+    spendEnergy();
+    triggerMood('content', 1);
+    State.addLog(c.age, `Group hangout with ${members.map(r=>r.name.split(' ')[0]).join(', ')}. Great time!`, 'rel');
+    State.saveGame();
+    return { ok:true, msg:`Hung out with ${members.length} friends. Everyone's closer now!` };
+  }
+
+  function groupTrip(destinationId) {
+    const g = State.get(); const c = g.character;
+    const members = c.socialCircle
+      .map(id => g.relationships.find(r => r.id === id && r.status === 'active'))
+      .filter(Boolean);
+    if (members.length < 2) return { ok:false, msg:'Need at least 2 people in your circle for a group trip.' };
+    if (c.age < 18) return { ok:false, msg:'Must be 18+ to plan a group trip.' };
+    if (!hasEnergy(2)) return { ok:false, msg:'Need 2 energy for a trip.' };
+    const dest = DATA.getTravelDest(destinationId);
+    if (!dest) return { ok:false, msg:'Unknown destination.' };
+    const groupCost = Math.round(dest.cost * 0.7); // discount for group
+    if (c.money < groupCost) return { ok:false, msg:`Need ${DATA.fmtMoney(groupCost)} (group rate).` };
+    c.money -= groupCost;
+    // Bigger effects than solo travel
+    const groupEffects = {};
+    for (const [k,v] of Object.entries(dest.effects)) groupEffects[k] = Math.round(v * 1.5);
+    State.applyEffects(groupEffects);
+    members.forEach(rel => { rel.relationship = Math.min(100, rel.relationship + 15); });
+    spendEnergy(2);
+    if (!c.travelStamps.includes(destinationId)) c.travelStamps.push(destinationId);
+    triggerMood('adventurous', 2);
+    State.addLog(c.age, `Group trip to ${dest.name} with ${members.map(r=>r.name.split(' ')[0]).join(', ')}!`, 'activity');
+    State.saveGame();
+    return { ok:true, msg:`Epic group trip to ${dest.name}! Friendships deepened.` };
+  }
+
+  // ── Online Dating ─────────────────────────────────────────────
+  function generateDatingProfile(c) {
+    const gen = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender === 'male' ? 'female' : 'male');
+    const nm  = DATA.randomName(gen);
+    const age = c.age + Math.floor(Math.random() * 9) - 4;
+    const interests = DATA.randomTraits(3);
+    const sharedInterests = interests.filter(t => DATA.randomTraits(5).includes(t)).length;
+    const compatibility = Math.round(40 + sharedInterests * 15 + (c.looks / 10) * 5 + Math.random() * 20);
+    const bios = [
+      'Looking for something real.',
+      'Dog parent. Coffee enthusiast. Part-time adventurer.',
+      'Here for good conversations and maybe more.',
+      'Lover of music, travel, and long walks.',
+      'Optimist with occasional realist tendencies.',
+      'Big on authenticity. Small on drama.',
+    ];
+    return { name: nm.full, age: Math.max(18, age), interests, compatibility, bio: DATA.randomFrom(bios), gender: gen };
+  }
+
+  function browseOnlineDating() {
+    const c = State.getChar();
+    if (c.age < 18) return { ok:false, msg:'Must be 18+ for dating apps.' };
+    if (c.sexuality === 'asexual') return { ok:false, msg:'Not really your thing.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    const profiles = [generateDatingProfile(c), generateDatingProfile(c), generateDatingProfile(c)];
+    return { ok:true, profiles };
+  }
+
+  function connectWithMatch(profile) {
+    const c = State.getChar();
+    const alreadyHasPartner = State.getPartner();
+    if (alreadyHasPartner) return { ok:false, msg:'Already in a relationship.' };
+    // Success based on looks + compatibility
+    const successChance = (c.looks / 100) * 0.4 + (profile.compatibility / 100) * 0.4 + 0.2;
+    if (Math.random() < successChance) {
+      const rel = State.addRelationship({ name:profile.name, type:'partner', subtype:'partner', age:profile.age, relationship:60, traits:profile.interests, status:'active' });
+      State.applyEffects({ happiness:15 });
+      spendEnergy();
+      triggerMood('excited', 2);
+      State.addLog(c.age, `Matched with ${rel.name} on a dating app!`, 'rel');
+      State.saveGame();
+      return { ok:true, matched:true, msg:`Matched with ${profile.name}! You are now connected.` };
+    } else {
+      State.applyEffects({ happiness:-3 });
+      spendEnergy();
+      State.saveGame();
+      return { ok:true, matched:false, msg:`${profile.name} did not match back. Better luck next time.` };
+    }
+  }
+
+  // ── Style & Tattoos ───────────────────────────────────────────
+  function changeStyle(styleId) {
+    const c = State.getChar();
+    const styleDef = DATA.STYLES.find(s => s.id === styleId);
+    if (!styleDef) return { ok:false, msg:'Unknown style.' };
+    const cost = 200;
+    if (c.money < cost) return { ok:false, msg:`Need ${DATA.fmtMoney(cost)} for a wardrobe update.` };
+    const prevStyle = DATA.STYLES.find(s => s.id === (c.style || 'casual'));
+    c.money -= cost;
+    c.style = styleId;
+    // Remove old style looks bonus, apply new one
+    const looksDelta = (styleDef.looks || 0) - (prevStyle?.looks || 0);
+    if (looksDelta !== 0) State.applyEffects({ looks: looksDelta });
+    State.addLog(c.age, `Changed style to ${styleDef.name}. Refreshing.`, 'activity');
+    State.saveGame();
+    return { ok:true, msg:`Looking ${styleDef.name.toLowerCase()}! ${looksDelta > 0 ? `Looks +${looksDelta}` : ''}` };
+  }
+
+  function getTattoo(design) {
+    const c = State.getChar();
+    if (c.age < 18) return { ok:false, msg:'Must be 18+.' };
+    const cost = 100 + Math.floor(Math.random() * 400);
+    if (c.money < cost) return { ok:false, msg:`Need ${DATA.fmtMoney(cost)} for this tattoo.` };
+    c.money -= cost;
+    c.tattoos = (c.tattoos || 0) + 1;
+    State.applyEffects({ happiness:8, looks:1 });
+    State.addLog(c.age, `Got a tattoo: ${design}. ${DATA.fmtMoney(cost)}.`, 'activity');
+    State.saveGame();
+    return { ok:true, msg:`New tattoo! +1 to your story.` };
+  }
+
+  // ── Banking ───────────────────────────────────────────────────
+  function depositSavings(amount) {
+    const c = State.getChar();
+    const amt = Math.min(Number(amount), c.money);
+    if (amt <= 0) return { ok:false, msg:'Nothing to deposit.' };
+    c.money -= amt;
+    c.bank.savings = (c.bank.savings || 0) + amt;
+    State.addLog(c.age, `Deposited ${DATA.fmtMoney(amt)} to savings.`, 'career');
+    State.saveGame();
+    return { ok:true, msg:`${DATA.fmtMoney(amt)} moved to savings. Earning ${((c.bank.apy||0.035)*100).toFixed(1)}% APY.` };
+  }
+
+  function withdrawSavings(amount) {
+    const c = State.getChar();
+    const amt = Math.min(Number(amount), c.bank.savings || 0);
+    if (amt <= 0) return { ok:false, msg:'Nothing to withdraw.' };
+    c.bank.savings -= amt;
+    c.money += amt;
+    State.addLog(c.age, `Withdrew ${DATA.fmtMoney(amt)} from savings.`, 'career');
+    State.saveGame();
+    return { ok:true, msg:`${DATA.fmtMoney(amt)} withdrawn to cash.` };
+  }
+
+  function payDebt(type, amount) {
+    const c = State.getChar();
+    const amt = Number(amount);
+    if (c.money < amt) return { ok:false, msg:'Not enough cash.' };
+    if (type === 'student_loan') {
+      if (!c.education.studentLoan) return { ok:false, msg:'No student loan.' };
+      const pay = Math.min(amt, c.education.studentLoan);
+      c.money -= pay;
+      c.education.studentLoan -= pay;
+      if (c.education.studentLoan < 0) c.education.studentLoan = 0;
+      State.addLog(c.age, `Paid ${DATA.fmtMoney(pay)} toward student loan. Remaining: ${DATA.fmtMoney(c.education.studentLoan)}.`, 'career');
+      State.saveGame();
+      return { ok:true, msg:`Paid ${DATA.fmtMoney(pay)} off your student loan!${c.education.studentLoan===0?' Fully paid off!':''}` };
+    }
+    if (type === 'mortgage') {
+      const house = c.assets.houses.find(h => h.mortgage > 0);
+      if (!house) return { ok:false, msg:'No active mortgage.' };
+      const pay = Math.min(amt, house.mortgage);
+      c.money -= pay;
+      house.mortgage -= pay;
+      house.equity += pay;
+      if (house.mortgage < 0) house.mortgage = 0;
+      State.addLog(c.age, `Paid ${DATA.fmtMoney(pay)} extra on mortgage. Remaining: ${DATA.fmtMoney(house.mortgage)}.`, 'career');
+      State.saveGame();
+      return { ok:true, msg:`Paid ${DATA.fmtMoney(pay)} off your mortgage!${house.mortgage===0?' Fully paid off!':''}` };
+    }
+    return { ok:false, msg:'Unknown debt type.' };
+  }
+
+  // ── Bucket List ───────────────────────────────────────────────
+  function setBucketGoals(goalIds) {
+    const c = State.getChar();
+    c.bucketList = goalIds.slice(0, 3).map(id => ({ goalId:id, completed:false }));
+    State.addLog(c.age, `Set your bucket list: ${goalIds.map(id => DATA.BUCKET_GOALS.find(g=>g.id===id)?.name || id).join(', ')}.`, 'activity');
+    State.saveGame();
+    return { ok:true };
+  }
+
+  function checkBucketList(g) {
+    const c = g.character;
+    if (!c.bucketList || c.bucketList.length === 0) return;
+    c.bucketList.forEach(entry => {
+      if (entry.completed) return;
+      const goal = DATA.BUCKET_GOALS.find(bg => bg.id === entry.goalId);
+      if (!goal) return;
+      let completed = false;
+      switch(goal.id) {
+        case 'find_love':       completed = g.relationships.some(r=>r.subtype==='spouse'); break;
+        case 'travel_5':        completed = (c.travelStamps?.length||0) >= 5; break;
+        case 'millionaire':     completed = getNetWorth(c) >= 1000000; break;
+        case 'famous':          completed = (c.fame||0) >= 80; break;
+        case 'child':           completed = g.relationships.some(r=>r.subtype==='child'); break;
+        case 'doctorate':       completed = c.education.level === 'doctorate'; break;
+        case 'own_home':        completed = c.assets.houses.length > 0; break;
+        case 'live_to_90':      completed = c.age >= 90; break;
+        case 'hobby_master':    completed = c.hobbies.some(h => h.skillLevel >= 90); break;
+        case 'world_traveler':  completed = (c.travelStamps?.length||0) >= 7; break;
+        case 'top_career':      const car = DATA.getCareer(c.career.jobId||''); completed = !!(car && c.career.promotionLevel >= car.promotions.length-1); break;
+        case 'social_butterfly':completed = c.socialCircle.length >= 3; break;
+      }
+      if (completed) {
+        entry.completed = true;
+        State.addLog(c.age, `Bucket list goal completed: ${goal.name}!`, 'good');
+        UI.showToast(`Bucket list: ${goal.name} done!`, 'good');
+        State.applyEffects({ happiness:15, mentalHealth:8 });
+        triggerMood('grateful', 2);
+      }
+    });
+  }
+
+  // ── Legacy system ─────────────────────────────────────────────
+  const LEGACY_KEY = 'lalalife_legacy';
+
+  function loadLegacy() {
+    try {
+      const raw = localStorage.getItem(LEGACY_KEY);
+      if (!raw) return { lives:0, totalPoints:0, allAchievements:[] };
+      return JSON.parse(raw);
+    } catch(e) { return { lives:0, totalPoints:0, allAchievements:[] }; }
+  }
+
+  function saveLegacy(summary) {
+    try {
+      const legacy = loadLegacy();
+      legacy.lives++;
+      let pts = 100; // base per life
+      summary.achievements.forEach(a => {
+        pts += 50;
+        if (!legacy.allAchievements.includes(a.id)) {
+          legacy.allAchievements.push(a.id);
+          pts += 30; // bonus for first-time unlock
+        }
+      });
+      if (summary.netWorth >= 1e9) pts += 300;
+      else if (summary.netWorth >= 1e6) pts += 150;
+      if (summary.age >= 100) pts += 200;
+      if (summary.age >= 80) pts += 80;
+      const c = State.getChar();
+      if ((c.travelStamps?.length || 0) >= 5) pts += 100;
+      // Bucket list completions
+      const bucketCompleted = (c.bucketList || []).filter(b => b.completed).length;
+      pts += bucketCompleted * 75;
+      legacy.totalPoints = (legacy.totalPoints || 0) + pts;
+      localStorage.setItem(LEGACY_KEY, JSON.stringify(legacy));
+      return { gained: pts, total: legacy.totalPoints, lives: legacy.lives };
+    } catch(e) { return null; }
+  }
+
+  function getLegacyBonuses(totalPoints) {
+    const bonuses = { smarts:0, happiness:0, health:0, looks:0, money:0 };
+    if (totalPoints >= 100)  bonuses.happiness += 3;
+    if (totalPoints >= 300)  bonuses.smarts    += 3;
+    if (totalPoints >= 500)  bonuses.money     += 1000;
+    if (totalPoints >= 750)  bonuses.health    += 3;
+    if (totalPoints >= 1000) bonuses.smarts    += 4;
+    if (totalPoints >= 1500) bonuses.money     += 2000;
+    if (totalPoints >= 2000) bonuses.looks     += 5;
+    if (totalPoints >= 3000) bonuses.happiness += 5;
+    if (totalPoints >= 5000) { bonuses.health += 5; bonuses.money += 5000; }
+    return bonuses;
+  }
+
+  function getLegacyInfo() {
+    const legacy = loadLegacy();
+    const bonuses = getLegacyBonuses(legacy.totalPoints);
+    return { ...legacy, bonuses };
   }
 
   return {
@@ -753,10 +1627,23 @@ const Engine = (() => {
     applyJob, quitJob, workHard, slackOff,
     enrollUniversity, enrollTrade,
     buyHouse, sellHouse, buyCar, sellCar, invest, casino,
-    relationshipAction, doActivity,
+    relationshipAction, planWedding, askFriendOut, planChild,
+    doActivity, buyItem,
     startHobby, practiceHobby,
     joinExtracurricular, participateExtracurricular,
     socializeAtSchool, meetRomanticInterest,
+    studyHard, skipClass, kissUpTeacher, flirtWithClassmate,
+    cramAllNight, seduceProfessor, cheatOnExam,
+    adoptPet, vetPet, playWithPet,
+    doSocialMedia, doSideHustle, travel,
+    triggerMood, manageCondition,
+    addToCircle, removeFromCircle, groupHangout, groupTrip,
+    browseOnlineDating, connectWithMatch,
+    changeStyle, getTattoo,
+    depositSavings, withdrawSavings, payDebt,
+    setBucketGoals, checkBucketList,
+    getEnergyMax, hasEnergy, spendEnergy,
+    getLegacyInfo, saveLegacy, loadLegacy, getLegacyBonuses,
     getLifeSummary, getNetWorth, checkPromotion,
   };
 })();

@@ -967,6 +967,124 @@ const DATA = (() => {
       ]
     },
 
+    // ── SEASONAL EVENTS ──────────────────────────────────────────
+    {
+      id:'new_year_resolution', title:'New Year', stage:'any', weight:4, minAge:16,
+      category:'social',
+      desc:"The new year arrives. Everyone is buzzing with hope and fresh starts.",
+      choices:[
+        { text:'Set a big goal', sub:'Ambitious start', effects:{ happiness:8, smarts:3 } },
+        { text:'Reflect quietly', sub:'Thoughtful energy', effects:{ happiness:5, mentalHealth:5 } },
+        { text:'Ignore the fuss', sub:'Every day is the same', effects:{} },
+      ]
+    },
+    {
+      id:'holiday_season', title:'Holiday Season', stage:'any', weight:4,
+      category:'family',
+      desc:"The holidays are here — lights, food, family gatherings, and maybe a little chaos.",
+      choices:[
+        { text:'Host a big gathering', sub:'-$300, great bonding', effects:{ happiness:18, money:-300 } },
+        { text:'Cozy night in', sub:'Simple and warm', effects:{ happiness:10, mentalHealth:6 } },
+        { text:'Travel somewhere festive', sub:'-$500', effects:{ happiness:15, money:-500 } },
+      ]
+    },
+    {
+      id:'summer_plans', title:'Summer Arrives', stage:'any', weight:3, minAge:8,
+      category:'adventure',
+      desc:"Summer is here. Long days, warm nights, and endless possibility.",
+      choices:[
+        { text:'Make the most of it', sub:'Active summer', effects:{ happiness:12, health:5 } },
+        { text:'Stay home and rest', sub:'Recovery mode', effects:{ happiness:6, health:8, mentalHealth:5 } },
+        { text:'Pick up a new skill', sub:'Productive summer', effects:{ smarts:8, happiness:5 } },
+      ]
+    },
+    {
+      id:'birthday_reflection', title:'Another Year Older', stage:'any', weight:3, minAge:18,
+      category:'social',
+      desc:"Your birthday. You find yourself reflecting on where you are and where you are going.",
+      choices:[
+        { text:'Celebrate with everyone', sub:'Big party energy', effects:{ happiness:15 } },
+        { text:'Intimate gathering', sub:'Quality over quantity', effects:{ happiness:10, mentalHealth:5 } },
+        { text:'Treat yourself solo', sub:'Self-love', effects:{ happiness:8, mentalHealth:8 } },
+      ]
+    },
+
+    // ── FINANCIAL CRISIS EVENTS ────────────────────────────────
+    {
+      id:'market_crash', title:'Market Crash', stage:'adult', weight:2,
+      category:'career',
+      desc:"The stock market collapses overnight. Financial headlines are terrifying.",
+      choices:[
+        { text:'Sell everything immediately', sub:'Salvage what you can', effects:{ happiness:-10 }, sellInvestments:true },
+        { text:'Hold and wait it out', sub:'Risky long game', effects:{ happiness:-5 } },
+        { text:'Buy more — the dip!', sub:'Bold contrarian move', effects:{ happiness:-3, money:-5000 }, buyDip:true },
+      ]
+    },
+    {
+      id:'recession_hits', title:'Economic Recession', stage:'adult', weight:2,
+      category:'career',
+      desc:"The economy enters recession. Layoffs are everywhere and costs are rising.",
+      choices:[
+        { text:'Cut all unnecessary spending', sub:'Survival mode', effects:{ happiness:-8 } },
+        { text:'Look for extra work', sub:'Side hustle energy', effects:{ happiness:-5, money:2000 } },
+        { text:'Keep living normally', sub:'Optimism (or denial)', effects:{ happiness:3, money:-3000 } },
+      ]
+    },
+
+    // ── HEALTH CONDITION EVENTS ───────────────────────────────
+    {
+      id:'diagnosed_anxiety', title:'Anxiety Diagnosis', stage:'any', weight:3, once:true, minAge:14,
+      category:'health',
+      desc:"You have been feeling off for a while. A doctor diagnoses you with an anxiety disorder.",
+      choices:[
+        { text:'Start treatment right away', sub:'Therapy + medication', effects:{ mentalHealth:5, money:-500 } },
+        { text:'Try lifestyle changes first', sub:'Exercise, diet, routines', effects:{ health:3 } },
+        { text:'Ignore it for now', sub:'Denial', effects:{ mentalHealth:-8 } },
+      ]
+    },
+    {
+      id:'back_injury', title:'Back Injury', stage:'adult', weight:3, once:true,
+      category:'health',
+      desc:"You hurt your back badly. The doctor says it might be chronic.",
+      choices:[
+        { text:'Follow the treatment plan', sub:'Physical therapy', effects:{ health:-5, money:-1000 } },
+        { text:'Push through it', sub:'Stubborn but risky', effects:{ health:-12 } },
+      ]
+    },
+
+    // ── PARENT EVENTS ────────────────────────────────────────────
+    {
+      id:'parent_retirement_call', title:'Parent Retires', stage:'any', weight:5, once:true,
+      requiresParent:true,
+      category:'family',
+      desc:"Your parent calls with big news — they've retired! They sound relieved.",
+      choices:[
+        { text:'Celebrate with them', sub:'Plan a dinner', effects:{ happiness:8 } },
+        { text:'Send flowers', sub:'Sweet gesture', effects:{ happiness:5 } },
+      ]
+    },
+    {
+      id:'parent_sick', title:"Parent's Health Scare", stage:'any', weight:4,
+      requiresParent:true,
+      category:'family',
+      desc:'Your parent is in the hospital. The doctors need to run more tests.',
+      choices:[
+        { text:'Go be with them', sub:'Drop everything', effects:{ happiness:-8, money:-1000 } },
+        { text:'Call every day', sub:'Supportive from afar', effects:{ happiness:-5 } },
+      ]
+    },
+    {
+      id:'parent_needs_help', title:'Caring for a Parent', stage:'any', weight:4, minAge:30,
+      requiresParent:true,
+      category:'family',
+      desc:'One of your parents is getting older and needs more help day-to-day.',
+      choices:[
+        { text:'Move them in with you', sub:'Big commitment', effects:{ happiness:-5, money:-5000 } },
+        { text:'Hire a carer for them', sub:'-$2000/yr', effects:{ happiness:5, money:-2000 } },
+        { text:'Visit more often', sub:'Emotional support', effects:{ happiness:3 } },
+      ]
+    },
+
     // ── CAREER-SPECIFIC ───────────────────────────────────────────
     {
       id:'career_doctor_save', title:'Code Blue', stage:'adult', weight:5,
@@ -1130,6 +1248,144 @@ const DATA = (() => {
     { id:'real_estate', name:'Real Estate License',     icon:'RE', cost:4000,  duration:1 },
   ];
 
+  // ── Items / Objects shop ───────────────────────────────────────
+  // hobbyBoost: hobby id whose practice gains +40% when item owned
+  // statBoost: immediate one-time stat gain on purchase (books/consumables)
+  // consumable: true = used once, removed from inventory
+  const ITEMS = [
+    // ── Instruments & Equipment ────────────────────────────────
+    { id:'guitar',        name:'Guitar',              icon:'Gt', iconClass:'ic-purple', cost:300,   category:'equipment', desc:'Strum your way to music mastery.', hobbyBoost:'music',        statBoost:{} },
+    { id:'keyboard',      name:'Keyboard / Piano',    icon:'Kp', iconClass:'ic-purple', cost:600,   category:'equipment', desc:'Keys unlock new musical horizons.', hobbyBoost:'music',        statBoost:{} },
+    { id:'camera',        name:'Camera',              icon:'Cm', iconClass:'ic-teal',   cost:400,   category:'equipment', desc:'Capture moments beautifully.',      hobbyBoost:'photography',  statBoost:{} },
+    { id:'video_camera',  name:'Video Camera',        icon:'Vc', iconClass:'ic-orange', cost:700,   category:'equipment', desc:'Start making your first films.',    hobbyBoost:'filmmaking',   statBoost:{} },
+    { id:'art_supplies',  name:'Art Supplies',        icon:'As', iconClass:'ic-rose',   cost:120,   category:'equipment', desc:'Paints, brushes, and canvases.',   hobbyBoost:'drawing',      statBoost:{} },
+    { id:'drawing_tablet',name:'Drawing Tablet',      icon:'Dt', iconClass:'ic-rose',   cost:350,   category:'equipment', desc:'Digital art at your fingertips.',  hobbyBoost:'drawing',      statBoost:{} },
+    { id:'laptop',        name:'Laptop',              icon:'Lt', iconClass:'ic-blue',   cost:900,   category:'equipment', desc:'Code, create, and connect.',        hobbyBoost:'coding',       statBoost:{ smarts:3 } },
+    { id:'dance_shoes',   name:'Dance Shoes',         icon:'Ds', iconClass:'ic-rose',   cost:160,   category:'equipment', desc:'The right shoes make all the difference.', hobbyBoost:'dance', statBoost:{} },
+    { id:'yoga_mat',      name:'Yoga Mat & Props',    icon:'Ym', iconClass:'ic-teal',   cost:80,    category:'equipment', desc:'Set the scene for mindful practice.', hobbyBoost:'yoga',      statBoost:{} },
+    { id:'running_shoes', name:'Running Shoes',       icon:'Rs', iconClass:'ic-green',  cost:120,   category:'equipment', desc:'Proper gear for serious athletes.', hobbyBoost:'sports',       statBoost:{ health:2 } },
+    { id:'journal',       name:'Writer\'s Journal',   icon:'Jn', iconClass:'ic-blue',   cost:40,    category:'equipment', desc:'Pour your thoughts onto the page.', hobbyBoost:'writing',     statBoost:{} },
+    { id:'fashion_set',   name:'Fashion Kit',         icon:'Fk', iconClass:'ic-rose',   cost:250,   category:'equipment', desc:'Fabrics, patterns, and a sewing machine.', hobbyBoost:'fashion', statBoost:{ looks:2 } },
+    { id:'acting_course', name:'Acting Handbook',     icon:'Ak', iconClass:'ic-amber',  cost:90,    category:'equipment', desc:'Study the craft of performance.',  hobbyBoost:'theater',      statBoost:{} },
+    // ── Books (consumable — one-time stat boost) ───────────────
+    { id:'book_science',  name:'Science Textbook',    icon:'BS', iconClass:'ic-blue',   cost:30,    category:'book', desc:'+8 Smarts', hobbyBoost:null, statBoost:{ smarts:8 },              consumable:true },
+    { id:'book_selfhelp', name:'Self-Help Book',      icon:'BH', iconClass:'ic-teal',   cost:18,    category:'book', desc:'+7 Happiness', hobbyBoost:null, statBoost:{ happiness:7 },        consumable:true },
+    { id:'book_fitness',  name:'Fitness Guide',       icon:'BF', iconClass:'ic-green',  cost:22,    category:'book', desc:'+6 Health', hobbyBoost:null, statBoost:{ health:6 },               consumable:true },
+    { id:'book_novel',    name:'Great Novel',         icon:'BN', iconClass:'ic-amber',  cost:14,    category:'book', desc:'+5 Smarts, +3 Happiness', hobbyBoost:null, statBoost:{ smarts:5, happiness:3 }, consumable:true },
+    { id:'book_art',      name:'Art History Book',    icon:'BA', iconClass:'ic-rose',   cost:35,    category:'book', desc:'+6 Smarts (art focus)', hobbyBoost:'drawing', statBoost:{ smarts:6 }, consumable:true },
+    { id:'book_business', name:'Business Strategy',  icon:'BB', iconClass:'ic-blue',   cost:45,    category:'book', desc:'+8 Smarts (career focus)', hobbyBoost:null, statBoost:{ smarts:8 }, consumable:true },
+    { id:'book_poetry',   name:'Poetry Collection',  icon:'BP', iconClass:'ic-purple', cost:12,    category:'book', desc:'+4 Happiness, +3 Smarts', hobbyBoost:'writing', statBoost:{ happiness:4, smarts:3 }, consumable:true },
+  ];
+
+  function getItem(id) { return ITEMS.find(i => i.id === id) || null; }
+  function getAllItems() { return ITEMS; }
+  function getItemsByCategory(cat) { return ITEMS.filter(i => i.category === cat); }
+
+  // ── Pets ────────────────────────────────────────────────────────
+  const PETS = [
+    { id:'dog',     name:'Dog',     icon:'Dg', iconClass:'ic-amber',  lifespan:12, happinessBonus:5, vetCost:300,  adoptCost:200,  desc:'Loyal, loving, and always happy to see you.'   },
+    { id:'cat',     name:'Cat',     icon:'Ct', iconClass:'ic-orange', lifespan:15, happinessBonus:3, vetCost:200,  adoptCost:150,  desc:'Independent but endlessly charming.'            },
+    { id:'rabbit',  name:'Rabbit',  icon:'Rb', iconClass:'ic-rose',   lifespan:8,  happinessBonus:3, vetCost:150,  adoptCost:80,   desc:'Fluffy and surprisingly social.'                },
+    { id:'hamster', name:'Hamster', icon:'Hm', iconClass:'ic-amber',  lifespan:2,  happinessBonus:2, vetCost:80,   adoptCost:30,   desc:'Tiny, busy, and adorable.'                      },
+    { id:'fish',    name:'Fish',    icon:'Fs', iconClass:'ic-teal',   lifespan:3,  happinessBonus:1, vetCost:30,   adoptCost:20,   desc:'Peaceful to watch, easy to care for.'           },
+    { id:'turtle',  name:'Turtle',  icon:'Tu', iconClass:'ic-green',  lifespan:40, happinessBonus:2, vetCost:120,  adoptCost:100,  desc:'Slow, wise, and might outlive you.'             },
+    { id:'parrot',  name:'Parrot',  icon:'Pr', iconClass:'ic-green',  lifespan:30, happinessBonus:4, vetCost:250,  adoptCost:400,  desc:'Talks back, sings, and steals your heart.'     },
+  ];
+
+  function getPet(id) { return PETS.find(p => p.id === id) || null; }
+
+  // ── Travel Destinations ─────────────────────────────────────────
+  const TRAVEL_DESTINATIONS = [
+    { id:'europe',       name:'Europe',        icon:'EU', iconClass:'ic-blue',   cost:3000, effects:{ smarts:7,  happiness:10, mentalHealth:5  }, desc:'Museums, history, and café culture.'           },
+    { id:'east_asia',    name:'East Asia',     icon:'EA', iconClass:'ic-teal',   cost:4000, effects:{ smarts:9,  happiness:8,  mentalHealth:6  }, desc:'Ancient traditions meet futuristic cities.'    },
+    { id:'southeast_asia',name:'SE Asia',      icon:'SA', iconClass:'ic-green',  cost:3500, effects:{ happiness:14,health:4,   mentalHealth:8  }, desc:'Tropical paradise and rich culture.'           },
+    { id:'americas',     name:'The Americas',  icon:'AM', iconClass:'ic-amber',  cost:2500, effects:{ happiness:10,health:6,   mentalHealth:5  }, desc:'Road trips, nature, and vibrant cities.'       },
+    { id:'africa',       name:'Africa',        icon:'AF', iconClass:'ic-orange', cost:4500, effects:{ happiness:12,smarts:6,   mentalHealth:8  }, desc:'Wildlife, history, and breathtaking landscapes.'},
+    { id:'middle_east',  name:'Middle East',   icon:'ME', iconClass:'ic-amber',  cost:3500, effects:{ smarts:8,  happiness:6,  mentalHealth:4  }, desc:'Ancient civilization and modern architecture.' },
+    { id:'oceania',      name:'Oceania',       icon:'OC', iconClass:'ic-teal',   cost:5000, effects:{ health:9,  happiness:14, mentalHealth:10 }, desc:'Sun, surf, and natural wonders.'               },
+  ];
+
+  function getTravelDest(id) { return TRAVEL_DESTINATIONS.find(t => t.id === id) || null; }
+
+  // ── Side Hustles ────────────────────────────────────────────────
+  // incomeRange: [min, max] — scaled by hobby skill level
+  const SIDE_HUSTLES = [
+    { id:'busking',     name:'Street Busking',    icon:'Bu', iconClass:'ic-purple', hobbyReq:'music',       minSkill:15, minSmarts:0,  desc:'Play music in public for tips.',          incomeRange:[30,  400]  },
+    { id:'sell_art',    name:'Sell Artwork',       icon:'Sa', iconClass:'ic-rose',   hobbyReq:'drawing',     minSkill:20, minSmarts:0,  desc:'Sell paintings, prints, and commissions.',incomeRange:[50,  900]  },
+    { id:'sell_photos', name:'Stock Photography',  icon:'Sp', iconClass:'ic-teal',   hobbyReq:'photography', minSkill:20, minSmarts:0,  desc:'License your photos online.',             incomeRange:[40,  600]  },
+    { id:'freelance',   name:'Freelance Coding',   icon:'Fc', iconClass:'ic-blue',   hobbyReq:'coding',      minSkill:30, minSmarts:0,  desc:'Build websites and apps for hire.',       incomeRange:[150,2500]  },
+    { id:'ghost_write', name:'Ghost Writing',      icon:'Gw', iconClass:'ic-blue',   hobbyReq:'writing',     minSkill:25, minSmarts:0,  desc:'Write content and articles for clients.', incomeRange:[60,  900]  },
+    { id:'freelance_video',name:'Freelance Video', icon:'Fv', iconClass:'ic-orange', hobbyReq:'filmmaking',  minSkill:25, minSmarts:0,  desc:'Film events and commercials.',            incomeRange:[100,1400]  },
+    { id:'sell_designs',name:'Sell Designs',       icon:'Sd', iconClass:'ic-rose',   hobbyReq:'fashion',     minSkill:20, minSmarts:0,  desc:'Sell fashion designs and handmade items.',incomeRange:[60,1100]  },
+    { id:'teach_dance', name:'Teach Dance',        icon:'Td', iconClass:'ic-rose',   hobbyReq:'dance',       minSkill:40, minSmarts:0,  desc:'Run local dance classes.',                incomeRange:[80,  700]  },
+    { id:'tutoring',    name:'Tutoring',           icon:'Tn', iconClass:'ic-blue',   hobbyReq:null,          minSkill:0,  minSmarts:65, desc:'Tutor students in subjects you excel at.',incomeRange:[25,  250]  },
+    { id:'odd_jobs',    name:'Odd Jobs',           icon:'Oj', iconClass:'ic-amber',  hobbyReq:null,          minSkill:0,  minSmarts:0,  desc:'Help neighbors, do errands and gigs.',    incomeRange:[15,  120]  },
+  ];
+
+  function getSideHustle(id) { return SIDE_HUSTLES.find(s => s.id === id) || null; }
+  function getAvailableSideHustles(character) {
+
+    return SIDE_HUSTLES.filter(sh => {
+      if (sh.minSmarts && character.smarts < sh.minSmarts) return false;
+      if (!sh.hobbyReq) return true;
+      const hobby = character.hobbies.find(h => h.id === sh.hobbyReq);
+      return hobby && hobby.skillLevel >= sh.minSkill;
+    });
+  }
+
+  // ── Moods ────────────────────────────────────────────────────────
+  // statMod: multiplier applied to positive drift of that stat while mood active
+  const MOODS = [
+    { id:'in_love',     name:'In Love',       color:'var(--pink)',   desc:'Heart full of butterflies.',       statMod:{ happiness:0.25, mentalHealth:0.15 } },
+    { id:'heartbroken', name:'Heartbroken',   color:'var(--red)',    desc:'Still picking up the pieces.',      statMod:{ happiness:-0.3, mentalHealth:-0.2 } },
+    { id:'inspired',    name:'Inspired',      color:'var(--accent)', desc:'Ideas flowing freely.',             statMod:{ smarts:0.2, happiness:0.1 } },
+    { id:'anxious',     name:'Anxious',       color:'var(--yellow)', desc:'Something feels off.',              statMod:{ mentalHealth:-0.25, health:-0.1 } },
+    { id:'excited',     name:'Excited',       color:'var(--orange)', desc:'Big things are coming.',            statMod:{ happiness:0.2, health:0.1 } },
+    { id:'content',     name:'Content',       color:'var(--green)',  desc:'Everything feels just right.',      statMod:{ happiness:0.15, mentalHealth:0.2 } },
+    { id:'stressed',    name:'Stressed',      color:'var(--red)',    desc:'Too much on your plate.',           statMod:{ mentalHealth:-0.3, health:-0.1 } },
+    { id:'melancholic', name:'Melancholic',   color:'var(--blue)',   desc:'Reflective and quiet.',             statMod:{ happiness:-0.15, smarts:0.1 } },
+    { id:'grateful',    name:'Grateful',      color:'var(--teal)',   desc:'Counting your blessings.',          statMod:{ happiness:0.15, mentalHealth:0.2 } },
+    { id:'adventurous', name:'Adventurous',   color:'var(--orange)', desc:'Ready for anything.',               statMod:{ happiness:0.2, health:0.1 } },
+  ];
+  function getMood(id) { return MOODS.find(m => m.id === id) || null; }
+
+  // ── Health Conditions ───────────────────────────────────────────
+  const HEALTH_CONDITIONS = [
+    { id:'anxiety',     name:'Anxiety Disorder', manageCost:120, desc:'Persistent anxiety affecting daily life.', drain:{ mentalHealth:-3, happiness:-1 } },
+    { id:'allergies',   name:'Allergies',         manageCost:50,  desc:'Seasonal and environmental allergies.',    drain:{ health:-2 } },
+    { id:'diabetes',    name:'Type 2 Diabetes',   manageCost:200, desc:'Requires lifestyle management.',           drain:{ health:-3, happiness:-1 } },
+    { id:'back_pain',   name:'Chronic Back Pain', manageCost:150, desc:'Persistent pain affecting mobility.',      drain:{ health:-2, happiness:-2 } },
+    { id:'insomnia',    name:'Insomnia',           manageCost:100, desc:'Difficulty sleeping well.',                drain:{ mentalHealth:-3, health:-1 } },
+    { id:'hypertension',name:'Hypertension',       manageCost:100, desc:'High blood pressure requiring monitoring.',drain:{ health:-2 } },
+  ];
+  function getCondition(id) { return HEALTH_CONDITIONS.find(c => c.id === id) || null; }
+
+  // ── Bucket Goals ────────────────────────────────────────────────
+  const BUCKET_GOALS = [
+    { id:'find_love',    name:'Find True Love',          icon:'Lo', desc:'Get married or be with a long-term partner.' },
+    { id:'travel_5',     name:'Visit 5 Destinations',    icon:'Tr', desc:'Collect at least 5 travel stamps.' },
+    { id:'millionaire',  name:'Become a Millionaire',    icon:'Mi', desc:'Reach $1,000,000 net worth.' },
+    { id:'famous',       name:'Reach Fame 80',           icon:'Fa', desc:'Become notably famous.' },
+    { id:'child',        name:'Have a Child',            icon:'Ch', desc:'Welcome a child into your life.' },
+    { id:'doctorate',    name:'Earn a Doctorate',        icon:'Dr', desc:'Complete the highest academic degree.' },
+    { id:'own_home',     name:'Own Your Home',           icon:'Ho', desc:'Purchase at least one property.' },
+    { id:'live_to_90',   name:'Live to 90',              icon:'90', desc:'Reach the age of 90.' },
+    { id:'hobby_master', name:'Master a Hobby',          icon:'Sk', desc:'Reach skill 90 in any hobby.' },
+    { id:'world_traveler',name:'Visit Every Region',    icon:'Gl', desc:'Travel to all 7 world regions.' },
+    { id:'top_career',   name:'Reach Career Peak',       icon:'Cp', desc:'Reach the top promotion in any career.' },
+    { id:'social_butterfly',name:'Build a Social Circle',icon:'Sc', desc:'Have 3+ people in your social circle.' },
+  ];
+
+  // ── Styles ──────────────────────────────────────────────────────
+  const STYLES = [
+    { id:'casual',       name:'Casual',       looks:0,  desc:'Everyday comfortable wear.' },
+    { id:'professional', name:'Professional', looks:3,  desc:'Sharp and polished.',        careerBoost:['lawyer','corporate_manager','accountant'] },
+    { id:'artistic',     name:'Artistic',     looks:2,  desc:'Expressive and creative.',   careerBoost:['visual_artist','musician','actor','fashion_designer'] },
+    { id:'edgy',         name:'Edgy',         looks:2,  desc:'Bold and distinctive.',      careerBoost:['tattoo_artist','musician','content_creator'] },
+    { id:'sporty',       name:'Sporty',       looks:2,  desc:'Athletic and active.',       healthBonus:3 },
+    { id:'elegant',      name:'Elegant',      looks:5,  desc:'Refined and timeless.',      careerBoost:['actor','fashion_designer'] },
+  ];
+
   const ACTIVITIES = [
     { id:'gym',          name:'Hit the Gym',       icon:'Gy', iconClass:'ic-green',  cost:50,  desc:'+12 Health',                    effects:{ health:12 },                  minAge:12 },
     { id:'meditate',     name:'Meditate',          icon:'Md', iconClass:'ic-teal',   cost:0,   desc:'+10 Happiness',                 effects:{ happiness:10 },               minAge:10 },
@@ -1222,6 +1478,10 @@ const DATA = (() => {
       if (ev.requiresPartner && !hasPartner) return false;
       if (ev.requiresJobCat) { if (!jobCat || ev.requiresJobCat !== jobCat) return false; }
       if (ev.isLgbt && !isLgbt) return false;
+      if (ev.requiresParent) {
+        const hasLivingParent = relationships.some(r => (r.subtype==='father'||r.subtype==='mother') && r.status==='active');
+        if (!hasLivingParent) return false;
+      }
       // sexuality discovery event only fires if not yet known
       if (ev.id === 'coming_out_decision' && character.sexualityKnown === false) return true;
       if (ev.id === 'coming_out_decision' && character.sexualityKnown !== false) return false;
@@ -1299,10 +1559,14 @@ const DATA = (() => {
     MALE_NAMES, FEMALE_NAMES, LAST_NAMES, COUNTRIES, WEALTH_CLASSES,
     EVENTS, CAREERS, HOBBIES, EXTRACURRICULARS, UNIVERSITY_MAJORS, TRADE_CERTIFICATES, ACTIVITIES, ACHIEVEMENTS,
     SEXUALITIES, GENDER_IDENTITIES,
+    ITEMS, PETS, TRAVEL_DESTINATIONS, SIDE_HUSTLES, MOODS, HEALTH_CONDITIONS, BUCKET_GOALS, STYLES,
     generateFamilyNames,
     randomFrom, randomName, randomCountry, randomWealthClass, randomTraits,
     getStage, filterEvents, getCareer, getAllCareers, getActivities, getHobby, getAllHobbies,
     getExtracurricular, getAllExtracurriculars, getAttractedGender,
+    getItem, getAllItems, getItemsByCategory,
+    getPet, getTravelDest, getSideHustle, getAvailableSideHustles,
+    getMood, getCondition,
     meetsCareerReqs, getHobbyCareerBonus, getExtracurricularCareerBonus, fmtMoney,
   };
 })();

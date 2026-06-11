@@ -197,6 +197,16 @@ const Cheats = (() => {
     print(`Name set to ${c.firstName} ${c.lastName}`);
   }
 
+  function refillEnergy() {
+    const c = State.getChar();
+    c.energy = c.energyMax || Engine.getEnergyMax(c.age);
+    markCheatsUsed();
+    State.saveGame();
+    UI.updateDisplay();
+    print(`Energy refilled to ${c.energy}/${c.energyMax}`);
+    UI.showToast('Energy fully restored!', 'good');
+  }
+
   function killCharacter() {
     const g = State.get();
     g.isAlive = false;
@@ -243,7 +253,7 @@ const Cheats = (() => {
             'event <id>  |  listevents',
             'boost <name or rel_id>',
             'max  |  fame <0-100>',
-            'name <first> [last]  |  kill',
+            'name <first> [last]  |  kill  |  energy',
             'listcerts'
           ].join('\n'));
           break;
@@ -266,6 +276,7 @@ const Cheats = (() => {
         case 'fame': setFame(parts[1]); break;
         case 'name': editCharacterName(parts[1], parts[2]); break;
         case 'kill': killCharacter(); break;
+        case 'energy': refillEnergy(); break;
         default: print(`Unknown command: ${op}. Type 'help' for commands.`, 'err');
       }
     } catch(e) {
@@ -298,6 +309,7 @@ const Cheats = (() => {
           <span class="cheat-val" id="cv-fame">${c.fame||0}</span>
         </div>
         <button class="btn btn-primary btn-full" id="cc-max" style="margin-top:8px">Max All Stats</button>
+        <button class="btn btn-success btn-full" id="cc-energy-refill" style="margin-top:6px">Refill Energy</button>
       </div>
 
       <div class="cheat-group">
@@ -452,6 +464,7 @@ const Cheats = (() => {
 
     // Max stats
     qs('#cc-max').addEventListener('click', maxAllStats);
+    qs('#cc-energy-refill').addEventListener('click', refillEnergy);
 
     // Character
     qs('#cc-age-btn').addEventListener('click', () => setAge(qs('#cc-age').value));

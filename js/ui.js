@@ -20,7 +20,12 @@ const UI = (() => {
     const c = g.character;
 
     qs('#hdr-name').textContent = `${c.firstName} ${c.lastName}`;
-    qs('#hdr-age').textContent  = `Age ${c.age} · ${c.country}`;
+    const moodTxt = c.mood ? ` · ${c.mood.name}` : '';
+    qs('#hdr-age').textContent  = `Age ${c.age} · ${c.country}${moodTxt}`;
+    // Mood color on age line
+    const ageEl = qs('#hdr-age');
+    if (c.mood) ageEl.style.color = c.mood.color;
+    else ageEl.style.color = '';
     qs('#hdr-money').textContent = DATA.fmtMoney(c.money);
 
     const jobEl = qs('#hdr-job');
@@ -36,9 +41,25 @@ const UI = (() => {
     setBar('happiness', c.happiness);
     setBar('smarts',    c.smarts);
     setBar('looks',     c.looks);
+    setBar('mind',      c.mentalHealth ?? 80);
 
     qs('#ageup-next').textContent = c.age + 1;
     qs('#btn-age-up').disabled = false;
+
+    // Energy dots
+    const energy    = c.energy    ?? 0;
+    const energyMax = c.energyMax ?? 3;
+    const dotsEl = qs('#energy-dots');
+    if (dotsEl) {
+      dotsEl.innerHTML = '';
+      for (let i = 0; i < Math.min(energyMax, 10); i++) {
+        const d = document.createElement('span');
+        d.className = 'e-dot' + (i < energy ? '' : ' e-empty');
+        dotsEl.appendChild(d);
+      }
+    }
+    const valEnergy = qs('#val-energy');
+    if (valEnergy) valEnergy.textContent = `${energy}/${energyMax}`;
   }
 
   function setBar(stat, val) {
@@ -319,6 +340,122 @@ const UI = (() => {
       }
     }
 
+    // ── Pets section ───────────────────────────────────────────
+    const petHdr = document.createElement('div'); petHdr.className = 'section-title'; petHdr.textContent = 'Pet'; div.appendChild(petHdr);
+    if (c.pet && c.pet.alive) {
+      const def = DATA.getPet(c.pet.type);
+      const petCard = document.createElement('div'); petCard.className = 'item-card';
+      petCard.innerHTML = `
+        <div class="item-top">
+          <div class="item-icon ${def.iconClass}">${def.icon}</div>
+          <div class="item-info">
+            <div class="item-name">${c.pet.name} the ${def.name}</div>
+            <div class="item-sub">Age ${c.pet.age} · Health ${c.pet.health}${c.pet.sick ? ' <span style="color:var(--red)">· Sick!</span>' : ''}</div>
+          </div>
+        </div>
+        <div class="item-actions">
+          <button class="btn btn-primary btn-sm" id="pet-play">Play</button>
+          ${c.pet.sick || c.pet.health < 70 ? `<button class="btn btn-success btn-sm" id="pet-vet">Vet -${DATA.fmtMoney(def.vetCost)}</button>` : ''}
+        </div>`;
+      petCard.querySelector('#pet-play')?.addEventListener('click', () => {
+        const r = Engine.playWithPet(); showToast(r.msg, r.ok ? 'good' : 'bad'); updateDisplay(); renderActivities();
+      });
+      petCard.querySelector('#pet-vet')?.addEventListener('click', () => {
+        const r = Engine.vetPet(); showToast(r.msg, r.ok ? 'good' : 'bad'); updateDisplay(); renderActivities();
+      });
+      div.appendChild(petCard);
+    } else if (!c.pet || !c.pet.alive) {
+      const adoptBtn = document.createElement('button');
+      adoptBtn.className = 'btn btn-secondary btn-full mb-8';
+      adoptBtn.innerHTML = 'Adopt a Pet<br><small class="text-dim">Choose your companion</small>';
+      adoptBtn.addEventListener('click', () => { closeModal('activities'); showAdoptPetModal(); });
+      div.appendChild(adoptBtn);
+    }
+
+    // ── Social Media (age 13+) ─────────────────────────────────
+    if (c.age >= 13) {
+      const smHdr = document.createElement('div'); smHdr.className = 'section-title'; smHdr.textContent = 'Social Media'; div.appendChild(smHdr);
+      const postTypes = [
+        { id:'general',  label:'Post a Selfie',       sub:'Looks-based. Could go viral · 1 energy' },
+        { id:'art',      label:'Share Your Art',       sub:'Needs drawing hobby · 1 energy',   hobbyReq:'drawing' },
+        { id:'music',    label:'Share Your Music',     sub:'Needs music hobby · 1 energy',     hobbyReq:'music' },
+        { id:'video',    label:'Post a Video',         sub:'Needs filmmaking hobby · 1 energy', hobbyReq:'filmmaking' },
+        { id:'writing',  label:'Share Your Writing',   sub:'Needs writing hobby · 1 energy',   hobbyReq:'writing' },
+      ];
+      postTypes.forEach(pt => {
+        if (pt.hobbyReq && !c.hobbies.find(h => h.id === pt.hobbyReq)) return;
+        const disabled = !Engine.hasEnergy();
+        const card = document.createElement('div');
+        card.className = `item-card${disabled ? ' locked' : ' clickable'}`;
+        card.innerHTML = `<div class="item-top"><div class="item-icon ic-purple">Sm</div><div class="item-info"><div class="item-name">${pt.label}</div><div class="item-sub">${pt.sub}</div></div></div>`;
+        if (!disabled) card.addEventListener('click', () => {
+          const r = Engine.doSocialMedia(pt.id);
+          showToast(r.msg, r.viral ? 'good' : r.ok ? 'info' : 'bad');
+          updateDisplay(); closeModal('activities');
+        });
+        div.appendChild(card);
+      });
+    }
+
+    // ── Side Hustles (age 16+) ─────────────────────────────────
+    if (c.age >= 16) {
+      const shHdr = document.createElement('div'); shHdr.className = 'section-title'; shHdr.textContent = 'Side Hustles'; div.appendChild(shHdr);
+      const available = DATA.getAvailableSideHustles(c);
+      if (!available.length) {
+        const note = document.createElement('p'); note.className = 'text-dim'; note.style.fontSize = '.8rem';
+        note.textContent = 'Build hobby skills or raise your Smarts to unlock side hustles.';
+        div.appendChild(note);
+      }
+      available.forEach(sh => {
+        const disabled = !Engine.hasEnergy();
+        const card = document.createElement('div'); card.className = `item-card${disabled ? ' locked' : ' clickable'}`;
+        card.innerHTML = `
+          <div class="item-top">
+            <div class="item-icon ${sh.iconClass}">${sh.icon}</div>
+            <div class="item-info">
+              <div class="item-name">${sh.name}</div>
+              <div class="item-sub">${sh.desc}</div>
+              <div class="item-detail text-green">${DATA.fmtMoney(sh.incomeRange[0])}–${DATA.fmtMoney(sh.incomeRange[1])} · 1 energy</div>
+            </div>
+          </div>`;
+        if (!disabled) card.addEventListener('click', () => {
+          const r = Engine.doSideHustle(sh.id);
+          showToast(r.msg, r.ok ? 'good' : 'bad');
+          updateDisplay(); closeModal('activities');
+        });
+        div.appendChild(card);
+      });
+    }
+
+    // ── Travel (age 18+) ──────────────────────────────────────
+    if (c.age >= 18) {
+      const tHdr = document.createElement('div'); tHdr.className = 'section-title';
+      tHdr.textContent = `Travel${c.travelStamps?.length ? ` · ${c.travelStamps.length} stamp${c.travelStamps.length>1?'s':''}` : ''}`;
+      div.appendChild(tHdr);
+      DATA.TRAVEL_DESTINATIONS.forEach(dest => {
+        const visited  = c.travelStamps?.includes(dest.id);
+        const disabled = !Engine.hasEnergy(2) || c.money < dest.cost;
+        const card = document.createElement('div'); card.className = `item-card${disabled ? ' locked' : ' clickable'}`;
+        const effTxt = Object.entries(dest.effects).filter(([,v])=>v>0).map(([k,v])=>`+${v} ${ucFirst(k)}`).join(' · ');
+        card.innerHTML = `
+          <div class="item-top">
+            <div class="item-icon ${dest.iconClass}">${dest.icon}</div>
+            <div class="item-info">
+              <div class="item-name">${dest.name}${visited ? ' <span class="badge badge-accent">Visited</span>' : ''}</div>
+              <div class="item-sub">${dest.desc}</div>
+              <div class="item-detail text-green">${effTxt}</div>
+              <div class="item-detail text-red">${DATA.fmtMoney(dest.cost)} · 2 energy</div>
+            </div>
+          </div>`;
+        if (!disabled) card.addEventListener('click', () => {
+          const r = Engine.travel(dest.id);
+          showToast(r.msg, r.ok ? 'good' : 'bad');
+          updateDisplay(); closeModal('activities');
+        });
+        div.appendChild(card);
+      });
+    }
+
     // Hobbies section
     const hobbyHeader = document.createElement('div');
     hobbyHeader.className = 'section-title';
@@ -399,6 +536,112 @@ const UI = (() => {
           showToast(result.msg, result.ok ? 'good' : 'bad');
           if (result.ok) { updateDisplay(); renderActivities(); }
         });
+        div.appendChild(card);
+      });
+    }
+
+    // ── Style & Tattoos (age 16+) ─────────────────────────────
+    if (c.age >= 16) {
+      const styleHdr = document.createElement('div'); styleHdr.className = 'section-title';
+      styleHdr.textContent = `Style${c.tattoos > 0 ? ` · ${c.tattoos} tattoo${c.tattoos>1?'s':''}` : ''}`;
+      div.appendChild(styleHdr);
+
+      const currentStyle = DATA.STYLES.find(s => s.id === (c.style || 'casual'));
+      const styleCard = document.createElement('div'); styleCard.className = 'item-card';
+      styleCard.innerHTML = `
+        <div class="item-top">
+          <div class="item-icon ic-rose">St</div>
+          <div class="item-info">
+            <div class="item-name">Current: ${currentStyle?.name || 'Casual'}</div>
+            <div class="item-sub">${currentStyle?.desc || ''}</div>
+          </div>
+        </div>
+        <div class="item-actions" style="flex-wrap:wrap;gap:5px">
+          ${DATA.STYLES.map(s => `<button class="btn btn-xs ${s.id===c.style?'btn-success':'btn-ghost'}" data-style="${s.id}">${s.name}</button>`).join('')}
+        </div>`;
+      styleCard.querySelectorAll('[data-style]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const r = Engine.changeStyle(btn.dataset.style);
+          showToast(r.ok ? r.msg : r.msg, r.ok ? 'good' : 'bad');
+          if (r.ok) { updateDisplay(); renderActivities(); }
+        });
+      });
+      div.appendChild(styleCard);
+
+      if (c.age >= 18) {
+        const tatDesigns = ['geometric pattern','floral sleeve','meaningful quote','small minimalist','portrait','abstract art'];
+        const tatCard = document.createElement('div'); tatCard.className = 'item-card clickable';
+        tatCard.innerHTML = `
+          <div class="item-top">
+            <div class="item-icon ic-orange">Tt</div>
+            <div class="item-info">
+              <div class="item-name">Get a Tattoo</div>
+              <div class="item-sub">$100–$500 · +Looks, +Happiness</div>
+            </div>
+          </div>`;
+        tatCard.addEventListener('click', () => {
+          const design = DATA.randomFrom(tatDesigns);
+          const r = Engine.getTattoo(design);
+          showToast(r.ok ? r.msg : r.msg, r.ok ? 'good' : 'bad');
+          if (r.ok) { updateDisplay(); renderActivities(); }
+        });
+        div.appendChild(tatCard);
+      }
+    }
+
+    // ── Health Conditions ──────────────────────────────────────
+    if (c.conditions && c.conditions.length > 0) {
+      const condHdr = document.createElement('div'); condHdr.className = 'section-title'; condHdr.textContent = 'Health Conditions'; div.appendChild(condHdr);
+      c.conditions.forEach(condId => {
+        const cond = DATA.getCondition(condId);
+        if (!cond) return;
+        const canAff = c.money >= cond.manageCost;
+        const card = document.createElement('div'); card.className = 'item-card';
+        card.innerHTML = `
+          <div class="item-top">
+            <div class="item-icon ic-red">Hc</div>
+            <div class="item-info">
+              <div class="item-name">${cond.name}</div>
+              <div class="item-sub">${cond.desc}</div>
+              <div class="item-detail text-red">Annual drain if unmanaged</div>
+            </div>
+          </div>
+          <div class="item-actions">
+            ${canAff ? `<button class="btn btn-success btn-sm" data-manage="${condId}">Manage -${DATA.fmtMoney(cond.manageCost)}</button>` : `<span class="text-red" style="font-size:.75rem">Need ${DATA.fmtMoney(cond.manageCost)}</span>`}
+          </div>`;
+        card.querySelector('[data-manage]')?.addEventListener('click', () => {
+          const r = Engine.manageCondition(condId);
+          showToast(r.msg, r.ok ? 'good' : 'bad');
+          if (r.ok) { updateDisplay(); renderActivities(); }
+        });
+        div.appendChild(card);
+      });
+    }
+
+    // ── Bucket List ────────────────────────────────────────────
+    const blHdr = document.createElement('div'); blHdr.className = 'section-title';
+    const blDone = (c.bucketList||[]).filter(b=>b.completed).length;
+    blHdr.textContent = `Bucket List${c.bucketList?.length ? ` · ${blDone}/${c.bucketList.length} done` : ''}`;
+    div.appendChild(blHdr);
+
+    if (!c.bucketList || c.bucketList.length === 0) {
+      const blBtn = document.createElement('button'); blBtn.className = 'btn btn-secondary btn-full mb-8';
+      blBtn.innerHTML = 'Set Your Life Goals<br><small class="text-dim">Choose 3 bucket list goals</small>';
+      blBtn.addEventListener('click', () => { closeModal('activities'); showBucketListModal(); });
+      div.appendChild(blBtn);
+    } else {
+      c.bucketList.forEach(entry => {
+        const goal = DATA.BUCKET_GOALS.find(g => g.id === entry.goalId);
+        if (!goal) return;
+        const card = document.createElement('div'); card.className = 'item-card';
+        card.innerHTML = `
+          <div class="item-top">
+            <div class="item-icon ${entry.completed ? 'ic-green' : 'ic-amber'}">${goal.icon}</div>
+            <div class="item-info">
+              <div class="item-name">${goal.name} ${entry.completed ? '<span class="badge badge-accent">Done!</span>' : ''}</div>
+              <div class="item-sub">${goal.desc}</div>
+            </div>
+          </div>`;
         div.appendChild(card);
       });
     }
@@ -501,6 +744,53 @@ const UI = (() => {
       div.appendChild(romBtn);
     }
 
+    // Online dating (age 18+, no partner, not asexual)
+    if (c.age >= 18 && c.sexuality !== 'asexual' && !State.getPartner()) {
+      const dtBtn = document.createElement('button');
+      dtBtn.className = 'btn btn-secondary btn-full mb-8';
+      dtBtn.innerHTML = 'Browse Dating Apps<br><small class="text-dim">Browse profiles and match · 1 energy</small>';
+      dtBtn.disabled = !Engine.hasEnergy();
+      dtBtn.addEventListener('click', () => {
+        const r = Engine.browseOnlineDating();
+        if (!r.ok) { showToast(r.msg, 'bad'); return; }
+        closeModal('relationships');
+        showOnlineDatingModal(r.profiles);
+      });
+      div.appendChild(dtBtn);
+    }
+
+    // Social Circle
+    const circleMembers = c.socialCircle
+      .map(id => g.relationships.find(r => r.id === id && r.status === 'active'))
+      .filter(Boolean);
+
+    if (circleMembers.length >= 2) {
+      const circHdr = document.createElement('div'); circHdr.className = 'section-title';
+      circHdr.textContent = `Your Circle (${circleMembers.length})`;
+      div.appendChild(circHdr);
+
+      const circleCard = document.createElement('div'); circleCard.className = 'item-card';
+      circleCard.style.background = 'var(--accent-light)';
+      circleCard.innerHTML = `
+        <div class="item-info mb-8">
+          <div class="item-name">Friends: ${circleMembers.map(r=>r.name.split(' ')[0]).join(', ')}</div>
+        </div>
+        <div class="item-actions" style="flex-wrap:wrap;gap:6px">
+          <button class="btn btn-primary btn-sm" id="btn-group-hangout">Group Hangout</button>
+          ${c.age >= 18 ? '<button class="btn btn-secondary btn-sm" id="btn-group-trip">Group Trip</button>' : ''}
+        </div>`;
+      circleCard.querySelector('#btn-group-hangout')?.addEventListener('click', () => {
+        const r = Engine.groupHangout();
+        showToast(r.msg, r.ok ? 'good' : 'bad');
+        if (r.ok) { updateDisplay(); renderRelationships(); }
+      });
+      circleCard.querySelector('#btn-group-trip')?.addEventListener('click', () => {
+        closeModal('relationships');
+        showGroupTripModal();
+      });
+      div.appendChild(circleCard);
+    }
+
     if (!g.relationships.length) {
       const empty = document.createElement('div'); empty.className = 'empty-state';
       empty.innerHTML = '<div class="empty-icon">?</div>No relationships yet.';
@@ -517,17 +807,25 @@ const UI = (() => {
         card.className = `item-card${active ? ' clickable' : ' rel-dead'}`;
         const iconMap = { father:'Fa', mother:'Mo', sibling:'Si', child:'Ch', friend:'Fr', crush:'Cr', partner:'Pa', spouse:'Sp', ex:'Ex' };
         const icon = iconMap[rel.subtype] || '??';
+        const inCircle = c.socialCircle.includes(rel.id);
         card.innerHTML = `
           <div class="item-top">
             <div class="item-icon ic-rose">${icon}</div>
             <div class="item-info">
-              <div class="item-name">${rel.name} <span class="text-dim">(${rel.age})</span></div>
+              <div class="item-name">${rel.name} <span class="text-dim">(${rel.age})</span>${inCircle?'<span class="badge badge-accent" style="margin-left:4px">Circle</span>':''}</div>
               <div class="item-sub">${ucFirst(rel.subtype)}${!active ? ' · ' + rel.status : ''}</div>
             </div>
             <span class="text-dim" style="font-size:.78rem;font-weight:700">${rel.relationship}%</span>
           </div>
           <div class="rel-meter"><div class="rel-meter-bar"><div class="rel-meter-fill" style="width:${rel.relationship}%"></div></div></div>
+          ${active && rel.type==='friend' ? `<div class="item-actions" style="margin-top:6px"><button class="btn btn-xs ${inCircle?'btn-ghost':'btn-secondary'}" data-circle="${rel.id}">${inCircle?'Remove from Circle':'Add to Circle'}</button></div>` : ''}
         `;
+        card.querySelector('[data-circle]')?.addEventListener('click', e => {
+          e.stopPropagation();
+          if (inCircle) { Engine.removeFromCircle(rel.id); showToast('Removed from circle.','info'); }
+          else { const r = Engine.addToCircle(rel.id); showToast(r.msg, r.ok?'good':'bad'); }
+          renderRelationships();
+        });
         if (active) card.addEventListener('click', () => showRelActionModal(rel));
         div.appendChild(card);
       });
@@ -539,29 +837,70 @@ const UI = (() => {
     closeModal('relationships');
     qs('#relaction-title').textContent = rel.name;
     const div = qs('#relaction-content'); div.innerHTML = '';
+    const hasE = Engine.hasEnergy();
 
     const actions = [
-      { id:'spend_time', label:'Spend Time Together', sub:'Bond and boost happiness.' },
-      { id:'compliment', label:'Give a Compliment',   sub:'Boost relationship quality.' },
-      { id:'gift',       label:'Give a Gift',          sub:'-$100, big boost.' },
-      { id:'argue',      label:'Pick a Fight',         sub:'Damages the relationship.' },
+      { id:'spend_time', label:'Spend Time Together',   sub:'+Happiness, +Bond · 1 energy',    energy:true },
+      { id:'compliment', label:'Give a Compliment',     sub:'+Bond · free',                    energy:false },
+      { id:'gift',       label:'Give a Gift',           sub:'-$100, big bond boost · 1 energy', energy:true },
+      { id:'argue',      label:'Pick a Fight',          sub:'Damages the relationship · free',  energy:false },
     ];
-    if (rel.type === 'partner') {
-      actions.push({ id:'date', label:'Go on a Date', sub:'-$80, boost mood and bond.' });
-      if (rel.subtype !== 'spouse') actions.push({ id:'propose', label:'Propose', sub:'Need 60+ relationship.', disabled: rel.relationship < 60 });
+
+    if (rel.type === 'friend' && c.age >= 12 && c.sexuality !== 'asexual') {
+      actions.push({ id:'ask_out', label:'Ask Them Out', sub:`${rel.relationship >= 60 ? 'Good chance!' : 'Low chance...'} · 1 energy`, energy:true, askOut:true });
     }
+
+    if (rel.type === 'partner') {
+      actions.push({ id:'date',           label:'Go on a Date',        sub:'-$80, boost mood and bond · 1 energy',       energy:true });
+      actions.push({ id:'love_letter',    label:'Write a Love Letter', sub:'+Bond, +Happiness · 1 energy',               energy:true });
+      actions.push({ id:'cook_dinner',    label:'Cook a Special Dinner',sub:'-$60, warm the heart · 1 energy',           energy:true });
+      actions.push({ id:'serenade',       label:'Serenade Them',       sub:`Music hobby helps! · 1 energy`,              energy:true });
+      actions.push({ id:'weekend_getaway',label:'Weekend Getaway',     sub:'-$400, big happiness boost · 1 energy',      energy:true });
+
+      if (rel.subtype !== 'spouse') {
+        actions.push({ id:'propose', label:'Propose', sub:'Need 60+ relationship, age 18+ · free', energy:false, disabled: rel.relationship < 60 || c.age < 18 });
+      }
+      if (rel.subtype === 'spouse') {
+        actions.push({ id:'plan_wedding', label:'Plan the Wedding', sub:'Choose a venue and celebrate · free', energy:false, isWedding:true });
+        if (c.age >= 18 && c.age <= 50) {
+          actions.push({ id:'plan_child_btn', label:'Try for a Child', sub:'Choose name and gender · 1 energy', energy:true, isPlanChild:true });
+        }
+      }
+    }
+
     actions.forEach(act => {
+      const disabled = (act.energy && !hasE) || !!act.disabled;
       const btn = document.createElement('button');
       btn.className = 'btn btn-secondary btn-full mb-8';
       btn.innerHTML = `${act.label}<br><small class="text-dim">${act.sub}</small>`;
-      btn.disabled = !!act.disabled;
-      btn.addEventListener('click', () => {
-        const r = Engine.relationshipAction(rel.id, act.id);
-        if (!r.ok) { showToast(r.msg, 'bad'); return; }
-        showToast(r.msg, 'good'); closeModal('relaction'); updateDisplay();
-      });
+      btn.disabled = disabled;
+
+      if (act.askOut) {
+        btn.addEventListener('click', () => {
+          const r = Engine.askFriendOut(rel.id);
+          showToast(r.msg, r.rejected ? 'bad' : 'good');
+          closeModal('relaction'); updateDisplay(); renderRelationships();
+        });
+      } else if (act.isWedding) {
+        btn.addEventListener('click', () => {
+          closeModal('relaction');
+          showWeddingPlannerModal(rel.id);
+        });
+      } else if (act.isPlanChild) {
+        btn.addEventListener('click', () => {
+          closeModal('relaction');
+          showPlanChildModal();
+        });
+      } else {
+        btn.addEventListener('click', () => {
+          const r = Engine.relationshipAction(rel.id, act.id);
+          if (!r.ok) { showToast(r.msg, 'bad'); return; }
+          showToast(r.msg, 'good'); closeModal('relaction'); updateDisplay();
+        });
+      }
       div.appendChild(btn);
     });
+
     if (rel.traits?.length) {
       const tl = document.createElement('p');
       tl.className = 'text-dim'; tl.style.marginTop = '8px';
@@ -569,6 +908,86 @@ const UI = (() => {
       div.appendChild(tl);
     }
     openModal('relaction');
+  }
+
+  function showWeddingPlannerModal(relId) {
+    const c = State.getChar();
+    const overlay = qs('#modal-event');
+    qs('#evt-category').textContent = 'Wedding';
+    qs('#evt-category').className = 'evt-category cat-social';
+    qs('#evt-title').textContent = 'Plan Your Wedding';
+    qs('#evt-desc').textContent = `Choose a venue for your big day. You have ${DATA.fmtMoney(c.money)}.`;
+    const venues = [
+      { id:'city_hall',    label:'City Hall',     sub:'Simple and sweet — free', cost:500    },
+      { id:'garden',       label:'Garden Party',  sub:'Flowers and friends',      cost:5000   },
+      { id:'beach',        label:'Beach Wedding', sub:'Romantic waves',           cost:8000   },
+      { id:'luxury_hotel', label:'Luxury Hotel',  sub:'The full dream',           cost:20000  },
+    ];
+    const choicesDiv = qs('#evt-choices'); choicesDiv.innerHTML = '';
+    venues.forEach(v => {
+      const canAff = c.money >= v.cost;
+      const btn = document.createElement('button');
+      btn.className = 'evt-choice';
+      btn.innerHTML = `${v.label}<div class="evt-choice-sub">${v.sub} — ${DATA.fmtMoney(v.cost)}</div>`;
+      btn.disabled = !canAff;
+      btn.style.opacity = canAff ? '1' : '0.4';
+      btn.addEventListener('click', () => {
+        overlay.classList.add('hidden');
+        const r = Engine.planWedding(relId, v.id);
+        showToast(r.msg, r.ok ? 'good' : 'bad');
+        updateDisplay();
+      });
+      choicesDiv.appendChild(btn);
+    });
+    const cancel = document.createElement('button');
+    cancel.className = 'evt-choice'; cancel.textContent = 'Later';
+    cancel.addEventListener('click', () => overlay.classList.add('hidden'));
+    choicesDiv.appendChild(cancel);
+    overlay.classList.remove('hidden');
+  }
+
+  function showPlanChildModal() {
+    const overlay = qs('#modal-event');
+    qs('#evt-category').textContent = 'Family';
+    qs('#evt-category').className = 'evt-category cat-family';
+    qs('#evt-title').textContent = 'Welcome a New Life';
+    qs('#evt-desc').textContent = 'Choose a name and gender for your child.';
+    const choicesDiv = qs('#evt-choices'); choicesDiv.innerHTML = '';
+
+    // Name input
+    const nameWrap = document.createElement('div');
+    nameWrap.style.cssText = 'margin-bottom:10px';
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'form-input';
+    nameInput.placeholder = 'Name (leave blank for random)';
+    nameInput.style.cssText = 'width:100%;margin-bottom:8px';
+    nameWrap.appendChild(nameInput);
+    choicesDiv.appendChild(nameWrap);
+
+    const genders = [
+      { id:'female', label:'Girl' },
+      { id:'male',   label:'Boy'  },
+      { id:'random', label:'Surprise!' },
+    ];
+    genders.forEach(g => {
+      const btn = document.createElement('button');
+      btn.className = 'evt-choice';
+      btn.textContent = g.label;
+      btn.addEventListener('click', () => {
+        overlay.classList.add('hidden');
+        const r = Engine.planChild(nameInput.value, g.id);
+        showToast(r.msg, r.ok ? 'good' : 'bad');
+        if (r.ok) { updateDisplay(); renderRelationships(); }
+      });
+      choicesDiv.appendChild(btn);
+    });
+
+    const cancel = document.createElement('button');
+    cancel.className = 'evt-choice'; cancel.textContent = 'Not yet';
+    cancel.addEventListener('click', () => overlay.classList.add('hidden'));
+    choicesDiv.appendChild(cancel);
+    overlay.classList.remove('hidden');
   }
 
   // ── CAREER modal ──────────────────────────────────────────────
@@ -670,6 +1089,41 @@ const UI = (() => {
   function renderEducation() {
     const c = State.getChar(); const div = qs('#education-content'); div.innerHTML = '';
     const edu = c.education;
+    const hasE = Engine.hasEnergy();
+
+    // ── School Life Study Actions (age 6–25) ──────────────────
+    if (c.age >= 6 && (c.age <= 18 || edu.inSchool)) {
+      const sHdr = document.createElement('div'); sHdr.className = 'section-title'; sHdr.textContent = 'School Actions'; div.appendChild(sHdr);
+
+      const studyActions = [
+        { label:'Study Hard',          sub:`+5–10 Smarts, a bit tiring · 1 energy`,        fn: () => Engine.studyHard(),          energy:true },
+        { label:'Skip Class',          sub:`+Happiness, -Smarts · Might get caught! · free`,fn: () => Engine.skipClass(),          energy:false },
+        { label:'Kiss Up to Teacher',  sub:`Random grade boost · 1 energy`,                 fn: () => Engine.kissUpTeacher(),      energy:true },
+      ];
+      if (c.age >= 12 && c.age <= 18) {
+        studyActions.push({ label:'Flirt with a Classmate', sub:`Might spark a crush · 1 energy`, fn: () => Engine.flirtWithClassmate(), energy:true });
+      }
+      if (edu.inSchool && c.age >= 18) {
+        studyActions.push({ label:'Cram All Night',   sub:`+10–18 Smarts, -Health & Happiness · 1 energy`, fn: () => Engine.cramAllNight(),      energy:true });
+        studyActions.push({ label:'Seduce the Professor', sub:`Very risky. Could backfire badly · 1 energy`, fn: () => Engine.seduceProfessor(), energy:true });
+        studyActions.push({ label:'Cheat on Exam',    sub:`Risky! Could get expelled · free`,    fn: () => Engine.cheatOnExam(),        energy:false });
+      }
+
+      studyActions.forEach(act => {
+        const disabled = act.energy && !hasE;
+        const card = document.createElement('div');
+        card.className = `item-card${disabled ? ' locked' : ' clickable'}`;
+        card.innerHTML = `<div class="item-top"><div class="item-info"><div class="item-name">${act.label}</div><div class="item-sub">${act.sub}</div></div></div>`;
+        if (!disabled) {
+          card.addEventListener('click', () => {
+            const r = act.fn();
+            showToast(r.msg, r.caught || r.scandal || r.rejected ? 'bad' : 'good');
+            if (r.ok) { updateDisplay(); renderEducation(); }
+          });
+        }
+        div.appendChild(card);
+      });
+    }
     const levelLabels = { none:'No formal education', elementary:'Elementary School', middleschool:'Middle School', highschool:'High School Diploma', tradeschool:'Trade School', some_college:'Some College', bachelor:"Bachelor's Degree", master:"Master's Degree", doctorate:'Doctorate' };
 
     const statusHdr = document.createElement('div'); statusHdr.className = 'section-title'; statusHdr.textContent = 'Current Education'; div.appendChild(statusHdr);
@@ -684,6 +1138,7 @@ const UI = (() => {
       ${certs ? `<div class="text-dim mt-4">Certificates: ${certs}</div>` : ''}
       ${edu.studentLoan > 0 ? `<div class="text-red mt-4">Loan: -${DATA.fmtMoney(edu.studentLoan)}</div>` : ''}
       ${edu.inSchool ? `<div class="text-accent mt-4">In school — Year ${edu.schoolYear}/${edu.schoolDuration}</div>` : ''}
+      ${c.age >= 6 ? `<div class="mt-4"><span class="fw-700">GPA:</span> <span class="${edu.gpa>=3.5?'text-green':edu.gpa>=2.0?'':'text-red'}">${(edu.gpa||2.5).toFixed(2)}/4.00</span>${edu.gpa>=3.5?' — Scholarship eligible!':edu.gpa<2.0?' — Too low for university':''}</div>` : ''}
     `;
     div.appendChild(statusCard);
 
@@ -746,6 +1201,63 @@ const UI = (() => {
     const c = State.getChar(); const div = qs('#assets-content'); div.innerHTML = '';
     const nw = Engine.getNetWorth(c);
 
+    // ── Banking section ─────────────────────────────────────────
+    mkSection(div, 'Bank Account');
+    const bankCard = document.createElement('div'); bankCard.className = 'bank-card mb-8';
+    const savings = c.bank?.savings || 0;
+    const apy = ((c.bank?.apy || 0.035) * 100).toFixed(1);
+    const totalDebt = (c.education.studentLoan || 0) + c.assets.houses.reduce((s,h)=>s+(h.mortgage||0),0);
+    bankCard.innerHTML = `
+      <div class="bank-row">
+        <div>
+          <div class="bank-label">Savings Account</div>
+          <div class="bank-value text-green">${DATA.fmtMoney(savings)}</div>
+          <div class="bank-sub">${apy}% APY · earns ${DATA.fmtMoney(Math.round(savings*(c.bank?.apy||0.035)))} next year</div>
+        </div>
+        <div>
+          <div class="bank-label">Total Debt</div>
+          <div class="bank-value text-red">${totalDebt>0?'-'+DATA.fmtMoney(totalDebt):'None'}</div>
+        </div>
+      </div>
+      <div class="bank-actions" id="bank-actions"></div>`;
+    div.appendChild(bankCard);
+
+    const bAct = bankCard.querySelector('#bank-actions');
+    // Deposit
+    const depWrap = document.createElement('div'); depWrap.className = 'bank-input-row';
+    const depInput = document.createElement('input'); depInput.type='number'; depInput.className='cheat-input'; depInput.placeholder='Amount'; depInput.style.cssText='flex:1;min-width:0';
+    const depBtn = document.createElement('button'); depBtn.className='btn btn-success btn-sm'; depBtn.textContent='Deposit';
+    const wdBtn = document.createElement('button'); wdBtn.className='btn btn-ghost btn-sm'; wdBtn.textContent='Withdraw';
+    depWrap.append(depInput, depBtn, wdBtn); bAct.appendChild(depWrap);
+    depBtn.addEventListener('click', () => { const r=Engine.depositSavings(parseFloat(depInput.value)||0); showToast(r.msg,r.ok?'good':'bad'); if(r.ok){updateDisplay();renderAssets();} });
+    wdBtn.addEventListener('click', () => { const r=Engine.withdrawSavings(parseFloat(depInput.value)||0); showToast(r.msg,r.ok?'good':'bad'); if(r.ok){updateDisplay();renderAssets();} });
+
+    // Pay off debts
+    if (c.education.studentLoan > 0) {
+      const slRow = document.createElement('div'); slRow.className = 'bank-debt-row';
+      slRow.innerHTML = `<span class="text-red fw-700">Student Loan: ${DATA.fmtMoney(c.education.studentLoan)}</span>`;
+      const payAmounts = [1000,5000,10000,c.education.studentLoan].filter((a,i,arr)=>a>0&&a<=c.money&&arr.indexOf(a)===i);
+      payAmounts.forEach(amt => {
+        const b=document.createElement('button'); b.className='btn btn-xs btn-danger';
+        b.textContent=amt===c.education.studentLoan?'Pay All':`Pay ${DATA.fmtMoney(amt)}`;
+        b.addEventListener('click', ()=>{const r=Engine.payDebt('student_loan',amt);showToast(r.msg,r.ok?'good':'bad');if(r.ok){updateDisplay();renderAssets();}});
+        slRow.appendChild(b);
+      });
+      bAct.appendChild(slRow);
+    }
+    const housesWithMortgage = c.assets.houses.filter(h=>h.mortgage>0);
+    housesWithMortgage.forEach(h => {
+      const mRow = document.createElement('div'); mRow.className = 'bank-debt-row';
+      mRow.innerHTML = `<span class="text-red fw-700">${h.name} mortgage: ${DATA.fmtMoney(h.mortgage)}</span>`;
+      [5000,20000,h.mortgage].filter((a,i,arr)=>a>0&&a<=c.money&&arr.indexOf(a)===i).forEach(amt => {
+        const b=document.createElement('button'); b.className='btn btn-xs btn-danger';
+        b.textContent=amt===h.mortgage?'Pay Off':'Pay '+DATA.fmtMoney(amt);
+        b.addEventListener('click',()=>{const r=Engine.payDebt('mortgage',amt);showToast(r.msg,r.ok?'good':'bad');if(r.ok){updateDisplay();renderAssets();}});
+        mRow.appendChild(b);
+      });
+      bAct.appendChild(mRow);
+    });
+
     const sumCard = document.createElement('div'); sumCard.className = 'summary-card mb-8';
     sumCard.innerHTML = `
       <div class="flex-between">
@@ -803,6 +1315,60 @@ const UI = (() => {
       div.appendChild(row);
     });
 
+    // ── Items Shop ─────────────────────────────────────────────
+    mkSection(div, 'Item Shop — Equipment');
+    const equipItems = DATA.getAllItems().filter(i => i.category === 'equipment');
+    equipItems.forEach(item => {
+      const owned   = c.items.includes(item.id);
+      const canAff  = c.money >= item.cost;
+      const row = document.createElement('div'); row.className = 'buy-item';
+      const hobbyName = item.hobbyBoost ? DATA.getHobby(item.hobbyBoost)?.name || item.hobbyBoost : null;
+      row.innerHTML = `
+        <div>
+          <div class="buy-item-name">
+            <span class="item-icon-tiny ${item.iconClass}">${item.icon}</span>
+            ${item.name}${owned ? ' <span class="badge badge-accent">Owned</span>' : ''}
+          </div>
+          <div class="buy-item-sub">${item.desc}${hobbyName ? ` · Boosts ${hobbyName}` : ''}</div>
+        </div>
+        <div class="flex-row">
+          <span class="buy-item-price">${DATA.fmtMoney(item.cost)}</span>
+          ${!owned && canAff ? `<button class="btn btn-success btn-xs" data-buy-item="${item.id}">Buy</button>` : ''}
+        </div>`;
+      if (!owned && canAff) {
+        row.querySelector('[data-buy-item]').addEventListener('click', () => {
+          const r = Engine.buyItem(item.id);
+          showToast(r.msg, r.ok ? 'good' : 'bad');
+          if (r.ok) { updateDisplay(); renderAssets(); }
+        });
+      }
+      div.appendChild(row);
+    });
+
+    mkSection(div, 'Books & Reading');
+    const bookItems = DATA.getAllItems().filter(i => i.category === 'book');
+    bookItems.forEach(item => {
+      const canAff = c.money >= item.cost;
+      const row = document.createElement('div'); row.className = 'buy-item';
+      row.innerHTML = `
+        <div>
+          <div class="buy-item-name"><span class="item-icon-tiny ${item.iconClass}">${item.icon}</span>${item.name}</div>
+          <div class="buy-item-sub">${item.desc}</div>
+        </div>
+        <div class="flex-row">
+          <span class="buy-item-price">${DATA.fmtMoney(item.cost)}</span>
+          ${canAff ? `<button class="btn btn-success btn-xs" data-buy-item="${item.id}">Read</button>` : ''}
+        </div>`;
+      if (canAff) {
+        row.querySelector('[data-buy-item]').addEventListener('click', () => {
+          const r = Engine.buyItem(item.id);
+          showToast(r.msg, r.ok ? 'good' : 'bad');
+          if (r.ok) { updateDisplay(); renderAssets(); }
+        });
+      }
+      div.appendChild(row);
+    });
+
     mkSection(div, 'Investments');
     const invCard = document.createElement('div'); invCard.className='item-card';
     invCard.innerHTML=`<div class="flex-between mb-8"><span class="fw-700">Portfolio</span><span class="text-green fw-700">${DATA.fmtMoney(c.assets.investments)}</span></div><div class="item-actions"><button class="btn btn-success btn-sm" id="inv-stocks">Buy Stocks</button><button class="btn btn-secondary btn-sm" id="inv-crypto">Buy Crypto</button></div>`;
@@ -822,6 +1388,156 @@ const UI = (() => {
     });
   }
 
+  // ── Online Dating modal ───────────────────────────────────────
+  function showOnlineDatingModal(profiles) {
+    let idx = 0;
+    function showProfile(i) {
+      if (i >= profiles.length) {
+        openModal('relationships');
+        return;
+      }
+      const p = profiles[i];
+      const overlay = qs('#modal-event');
+      qs('#evt-category').textContent = 'Dating Apps';
+      qs('#evt-category').className = 'evt-category cat-social';
+      qs('#evt-title').textContent = `${p.name}, ${p.age}`;
+      qs('#evt-desc').textContent = `"${p.bio}" · Interests: ${p.interests.join(', ')} · Compatibility: ${p.compatibility}%`;
+      const choicesDiv = qs('#evt-choices'); choicesDiv.innerHTML = '';
+      const connectBtn = document.createElement('button'); connectBtn.className = 'evt-choice';
+      connectBtn.textContent = 'Connect';
+      connectBtn.addEventListener('click', () => {
+        overlay.classList.add('hidden');
+        const r = Engine.connectWithMatch(p);
+        showToast(r.msg, r.matched ? 'good' : 'info');
+        updateDisplay();
+        if (!r.matched && i + 1 < profiles.length) showProfile(i + 1);
+        else openModal('relationships');
+      });
+      const passBtn = document.createElement('button'); passBtn.className = 'evt-choice';
+      passBtn.textContent = `Pass${i+1 < profiles.length ? ' · See next' : ''}`;
+      passBtn.addEventListener('click', () => { overlay.classList.add('hidden'); showProfile(i + 1); });
+      choicesDiv.append(connectBtn, passBtn);
+      overlay.classList.remove('hidden');
+    }
+    showProfile(0);
+  }
+
+  // ── Group Trip modal ──────────────────────────────────────────
+  function showGroupTripModal() {
+    const c = State.getChar();
+    const overlay = qs('#modal-event');
+    qs('#evt-category').textContent = 'Group Trip';
+    qs('#evt-category').className = 'evt-category cat-adventure';
+    qs('#evt-title').textContent = 'Plan a Group Trip';
+    qs('#evt-desc').textContent = `Your circle adventure awaits. Group discount applies! You have ${DATA.fmtMoney(c.money)}.`;
+    const choicesDiv = qs('#evt-choices'); choicesDiv.innerHTML = '';
+    DATA.TRAVEL_DESTINATIONS.forEach(dest => {
+      const groupCost = Math.round(dest.cost * 0.7);
+      const canAff = c.money >= groupCost;
+      const btn = document.createElement('button'); btn.className = 'evt-choice';
+      btn.innerHTML = `${dest.name} — ${DATA.fmtMoney(groupCost)}<div class="evt-choice-sub">${dest.desc}</div>`;
+      btn.disabled = !canAff; btn.style.opacity = canAff ? '1' : '0.4';
+      btn.addEventListener('click', () => {
+        overlay.classList.add('hidden');
+        const r = Engine.groupTrip(dest.id);
+        showToast(r.msg, r.ok ? 'good' : 'bad');
+        updateDisplay();
+      });
+      choicesDiv.appendChild(btn);
+    });
+    const cancel = document.createElement('button'); cancel.className='evt-choice'; cancel.textContent='Cancel';
+    cancel.addEventListener('click', () => { overlay.classList.add('hidden'); openModal('relationships'); });
+    choicesDiv.appendChild(cancel);
+    overlay.classList.remove('hidden');
+  }
+
+  // ── Bucket List modal ─────────────────────────────────────────
+  function showBucketListModal() {
+    const overlay = qs('#modal-event');
+    qs('#evt-category').textContent = 'Bucket List';
+    qs('#evt-category').className = 'evt-category cat-adventure';
+    qs('#evt-title').textContent = 'Set Your Life Goals';
+    qs('#evt-desc').textContent = 'Choose 3 things you want to accomplish before your life is over.';
+    const choicesDiv = qs('#evt-choices'); choicesDiv.innerHTML = '';
+
+    const selected = [];
+    const goalBtns = [];
+    DATA.BUCKET_GOALS.forEach(goal => {
+      const btn = document.createElement('button'); btn.className = 'evt-choice';
+      btn.innerHTML = `${goal.name}<div class="evt-choice-sub">${goal.desc}</div>`;
+      btn.addEventListener('click', () => {
+        const idx = selected.indexOf(goal.id);
+        if (idx >= 0) {
+          selected.splice(idx, 1);
+          btn.style.background = '';
+          btn.style.fontWeight = '';
+        } else if (selected.length < 3) {
+          selected.push(goal.id);
+          btn.style.background = 'var(--accent-light)';
+          btn.style.fontWeight = '700';
+        }
+        confirmBtn.textContent = `Set Goals (${selected.length}/3)`;
+        confirmBtn.disabled = selected.length !== 3;
+      });
+      goalBtns.push(btn);
+      choicesDiv.appendChild(btn);
+    });
+
+    const confirmBtn = document.createElement('button'); confirmBtn.className='btn btn-primary btn-full';
+    confirmBtn.textContent = 'Set Goals (0/3)'; confirmBtn.disabled = true;
+    confirmBtn.style.marginTop = '8px';
+    confirmBtn.addEventListener('click', () => {
+      overlay.classList.add('hidden');
+      Engine.setBucketGoals(selected);
+      showToast('Bucket list set! Good luck!', 'good');
+      openModal('activities');
+    });
+    choicesDiv.appendChild(confirmBtn);
+    const cancel = document.createElement('button'); cancel.className='evt-choice'; cancel.textContent='Later';
+    cancel.addEventListener('click', () => { overlay.classList.add('hidden'); openModal('activities'); });
+    choicesDiv.appendChild(cancel);
+    overlay.classList.remove('hidden');
+  }
+
+  // ── Adopt pet modal ───────────────────────────────────────────
+  function showAdoptPetModal() {
+    const c = State.getChar();
+    const overlay = qs('#modal-event');
+    qs('#evt-category').textContent = 'Pets';
+    qs('#evt-category').className = 'evt-category cat-social';
+    qs('#evt-title').textContent = 'Adopt a Pet';
+    qs('#evt-desc').textContent = 'Choose your new companion. They will bring joy to your life.';
+    const choicesDiv = qs('#evt-choices'); choicesDiv.innerHTML = '';
+
+    // Name input
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text'; nameInput.className = 'form-input';
+    nameInput.placeholder = 'Name your pet (leave blank for random)';
+    nameInput.style.cssText = 'width:100%;margin-bottom:10px';
+    choicesDiv.appendChild(nameInput);
+
+    DATA.PETS.forEach(pet => {
+      const canAff = c.money >= pet.adoptCost;
+      const btn = document.createElement('button');
+      btn.className = 'evt-choice';
+      btn.innerHTML = `${pet.name} — ${DATA.fmtMoney(pet.adoptCost)}<div class="evt-choice-sub">Lifespan ~${pet.lifespan} yrs · ${pet.desc}</div>`;
+      btn.disabled = !canAff;
+      btn.style.opacity = canAff ? '1' : '0.4';
+      btn.addEventListener('click', () => {
+        overlay.classList.add('hidden');
+        const r = Engine.adoptPet(pet.id, nameInput.value);
+        showToast(r.msg, r.ok ? 'good' : 'bad');
+        if (r.ok) { updateDisplay(); openModal('activities'); }
+      });
+      choicesDiv.appendChild(btn);
+    });
+    const cancel = document.createElement('button');
+    cancel.className = 'evt-choice'; cancel.textContent = 'Maybe later';
+    cancel.addEventListener('click', () => { overlay.classList.add('hidden'); openModal('activities'); });
+    choicesDiv.appendChild(cancel);
+    overlay.classList.remove('hidden');
+  }
+
   // ── DEATH screen ──────────────────────────────────────────────
   function showDeathScreen() {
     const s = Engine.getLifeSummary();
@@ -838,6 +1554,21 @@ const UI = (() => {
       ? `<h4>Life Highlights</h4>${s.highlights.map(h=>`<div class="highlight-item">· ${h}</div>`).join('')}` : '';
     qs('#death-achievements').innerHTML = s.achievements.map(a=>`<div class="ach-badge">${a.name}</div>`).join('');
     if (s.cheatsUsed) qs('#cheats-watermark').classList.remove('hidden');
+
+    // Save legacy and show legacy info
+    const legacyResult = Engine.saveLegacy(s);
+    if (legacyResult) {
+      const legEl = document.createElement('div');
+      legEl.className = 'legacy-summary';
+      const nextBonuses = Engine.getLegacyBonuses(legacyResult.total);
+      const bonusTxt = Object.entries(nextBonuses).filter(([,v])=>v>0).map(([k,v])=>`+${k==='money'?DATA.fmtMoney(v):`${v} ${ucFirst(k)}`}`).join(', ');
+      legEl.innerHTML = `
+        <div class="legacy-title">Family Legacy</div>
+        <div class="legacy-stats">Lives: ${legacyResult.lives} · Total Points: ${legacyResult.total.toLocaleString()}</div>
+        ${bonusTxt ? `<div class="legacy-bonus">Next life starts with: ${bonusTxt}</div>` : ''}
+        <div class="legacy-gained">+${legacyResult.gained} pts this life</div>`;
+      qs('#death-achievements').after(legEl);
+    }
     showScreen('death');
   }
 
@@ -866,6 +1597,19 @@ const UI = (() => {
     qs('#preview-family').innerHTML =
       `Parents: ${parents.map(p=>p.name).join(' &amp; ')}<br>` +
       (siblings.length ? `Siblings: ${siblings.map(s=>s.name).join(', ')}` : 'Only child');
+
+    // Legacy bonus display
+    const legacy = Engine.getLegacyInfo();
+    const legEl  = qs('#preview-family');
+    if (legacy.lives > 0) {
+      const bonusTxt = Object.entries(legacy.bonuses).filter(([,v])=>v>0).map(([k,v])=>`+${k==='money'?DATA.fmtMoney(v):`${v} ${k}`}`).join(' · ');
+      if (bonusTxt) {
+        const legDiv = document.createElement('div');
+        legDiv.style.cssText = 'margin-top:8px;font-size:.78rem;color:var(--accent);font-weight:600';
+        legDiv.textContent = `Family legacy (${legacy.lives} lives): ${bonusTxt}`;
+        legEl.after(legDiv);
+      }
+    }
 
     qs('#char-preview').classList.remove('hidden');
     qs('#preview-actions').classList.remove('hidden');

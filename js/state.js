@@ -34,6 +34,34 @@ const State = (() => {
         hobbies: [],
         // Extracurriculars: [{ id, skillLevel, yearsParticipated }]
         extracurriculars: [],
+        // Items owned: [itemId, ...]
+        items: [],
+        // Energy
+        energy: 3,
+        energyMax: 3,
+        // Mental health
+        mentalHealth: 80,
+        // Pet: null or { type, name, age, health, alive, sick }
+        pet: null,
+        // Travel stamps: ['europe','east_asia',...]
+        travelStamps: [],
+        // Mood: null or { id, name, color, turnsLeft }
+        mood: null,
+        // Reputation 0-100 (community standing, separate from fame)
+        reputation: 50,
+        // Health conditions: [conditionId, ...]
+        conditions: [],
+        // Social circle: [relId, ...] — close friend group
+        socialCircle: [],
+        // Bucket list: [{ goalId, completed }, ...]
+        bucketList: [],
+        // City size (affects school quality, job variety)
+        cityTier: 'medium',
+        // Personal style
+        style: 'casual',
+        tattoos: 0,
+        // Bank account
+        bank: { savings: 0, apy: 0.035 },
       },
       relationships: [],
       log: [],
@@ -81,6 +109,22 @@ const State = (() => {
       if (!_game.character.sexuality) _game.character.sexuality = 'straight';
       if (!_game.character.genderIdentity) _game.character.genderIdentity = 'cis';
       if (_game.character.sexualityKnown === undefined) _game.character.sexualityKnown = true;
+      if (!_game.character.items) _game.character.items = [];
+      if (_game.character.energy === undefined) _game.character.energy = 3;
+      if (_game.character.energyMax === undefined) _game.character.energyMax = 3;
+      if (_game.character.mentalHealth === undefined) _game.character.mentalHealth = 80;
+      if (_game.character.pet === undefined) _game.character.pet = null;
+      if (!_game.character.travelStamps) _game.character.travelStamps = [];
+      if (_game.character.education.gpa === undefined || _game.character.education.gpa === 0) _game.character.education.gpa = 2.5;
+      if (_game.character.mood === undefined) _game.character.mood = null;
+      if (_game.character.reputation === undefined) _game.character.reputation = 50;
+      if (!_game.character.conditions) _game.character.conditions = [];
+      if (!_game.character.socialCircle) _game.character.socialCircle = [];
+      if (!_game.character.bucketList) _game.character.bucketList = [];
+      if (!_game.character.cityTier) _game.character.cityTier = 'medium';
+      if (!_game.character.style) _game.character.style = 'casual';
+      if (_game.character.tattoos === undefined) _game.character.tattoos = 0;
+      if (!_game.character.bank) _game.character.bank = { savings: 0, apy: 0.035 };
       return true;
     } catch(e) { return false; }
   }
@@ -150,12 +194,13 @@ const State = (() => {
   function applyEffects(effects) {
     if (!effects) return;
     const c = _game.character;
-    if (effects.health    !== undefined) c.health    = clampStat(c.health    + effects.health);
-    if (effects.happiness !== undefined) c.happiness = clampStat(c.happiness + effects.happiness);
-    if (effects.smarts    !== undefined) c.smarts    = clampStat(c.smarts    + effects.smarts);
-    if (effects.looks     !== undefined) c.looks     = clampStat(c.looks     + effects.looks);
-    if (effects.money     !== undefined) c.money     = Math.max(-999999, c.money + effects.money);
-    if (effects.fame      !== undefined) c.fame      = clampStat((c.fame || 0) + effects.fame);
+    if (effects.health       !== undefined) c.health       = clampStat(c.health       + effects.health);
+    if (effects.happiness    !== undefined) c.happiness    = clampStat(c.happiness    + effects.happiness);
+    if (effects.smarts       !== undefined) c.smarts       = clampStat(c.smarts       + effects.smarts);
+    if (effects.looks        !== undefined) c.looks        = clampStat(c.looks        + effects.looks);
+    if (effects.money        !== undefined) c.money        = Math.max(-999999, c.money + effects.money);
+    if (effects.fame         !== undefined) c.fame         = clampStat((c.fame || 0)  + effects.fame);
+    if (effects.mentalHealth !== undefined) c.mentalHealth = clampStat((c.mentalHealth ?? 80) + effects.mentalHealth);
     _save();
   }
 
