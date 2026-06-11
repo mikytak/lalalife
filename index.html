@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>LaLaLaLife</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══════════════════════ INTRO SCREEN ═══════════════════════ -->
+<div id="screen-intro" class="screen active">
+  <div class="intro-wrap">
+    <div class="intro-logo"></div>
+    <h1 class="intro-title">LaLaLaLife</h1>
+    <p class="intro-tagline">One life. Infinite choices.</p>
+
+    <!-- Step 1: Personalize -->
+    <div id="step-customize" class="customize-form">
+      <h3>Your Character</h3>
+
+      <div class="form-group">
+        <label>First Name</label>
+        <input class="form-input" type="text" id="custom-firstname" placeholder="Leave blank for random" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Last Name</label>
+        <input class="form-input" type="text" id="custom-lastname" placeholder="Leave blank for random" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Country</label>
+        <select class="form-input select-input" id="custom-country">
+          <option value="">Random country</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Gender</label>
+        <div class="gender-row">
+          <button class="gender-btn active" data-gender="female">Female</button>
+          <button class="gender-btn" data-gender="male">Male</button>
+          <button class="gender-btn" data-gender="random">Random</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Sexuality</label>
+        <select class="form-input select-input" id="custom-sexuality">
+          <option value="discover">Discover in game</option>
+          <option value="straight">Straight</option>
+          <option value="gay">Gay / Lesbian</option>
+          <option value="bisexual">Bisexual</option>
+          <option value="pansexual">Pansexual</option>
+          <option value="asexual">Asexual</option>
+        </select>
+      </div>
+
+      <button id="btn-generate" class="btn btn-primary btn-lg" style="margin-top:4px">Generate Character</button>
+    </div>
+
+    <!-- Step 2: Preview -->
+    <div id="char-preview" class="char-preview hidden">
+      <div class="preview-name" id="preview-name"></div>
+      <div class="preview-meta" id="preview-meta"></div>
+      <div class="preview-stats" id="preview-stats"></div>
+      <div class="preview-family" id="preview-family"></div>
+    </div>
+
+    <div id="preview-actions" class="intro-actions hidden">
+      <button id="btn-start" class="btn btn-primary btn-lg">Start This Life</button>
+      <button id="btn-reroll" class="btn btn-secondary btn-lg">Reroll Stats</button>
+      <button id="btn-back-customize" class="btn btn-ghost btn-lg">Edit Details</button>
+    </div>
+
+    <div id="initial-actions" class="intro-actions">
+      <button id="btn-continue" class="btn btn-ghost btn-lg hidden">Continue Saved Life</button>
+      <button id="btn-import-btn" class="btn btn-ghost btn-lg">Import Save File</button>
+      <input type="file" id="import-file" accept=".json" style="display:none">
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ GAME SCREEN ═══════════════════════ -->
+<div id="screen-game" class="screen">
+
+  <!-- Stats Header -->
+  <div id="stats-header">
+    <div class="header-top">
+      <div>
+        <span id="hdr-name" class="hdr-name">—</span>
+        <span id="hdr-age" class="hdr-age">Age 0</span>
+      </div>
+      <div class="header-right">
+        <span id="hdr-money" class="hdr-money">$0</span>
+        <span id="hdr-job" class="hdr-job badge">Newborn</span>
+      </div>
+    </div>
+    <div class="stats-bars">
+      <div class="stat-row">
+        <span class="stat-dot dot-health"></span>
+        <span class="stat-label">Health</span>
+        <div class="bar-track"><div id="bar-health" class="bar-fill bar-health"></div></div>
+        <span id="val-health" class="stat-num">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-dot dot-happiness"></span>
+        <span class="stat-label">Happy</span>
+        <div class="bar-track"><div id="bar-happiness" class="bar-fill bar-happiness"></div></div>
+        <span id="val-happiness" class="stat-num">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-dot dot-smarts"></span>
+        <span class="stat-label">Smarts</span>
+        <div class="bar-track"><div id="bar-smarts" class="bar-fill bar-smarts"></div></div>
+        <span id="val-smarts" class="stat-num">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-dot dot-looks"></span>
+        <span class="stat-label">Looks</span>
+        <div class="bar-track"><div id="bar-looks" class="bar-fill bar-looks"></div></div>
+        <span id="val-looks" class="stat-num">0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Life Feed -->
+  <div id="life-feed">
+    <div id="feed-inner"></div>
+  </div>
+
+  <!-- Action Bar -->
+  <div id="action-bar">
+    <button id="btn-age-up" class="btn btn-ageup">
+      <span class="ageup-label">Age Up</span>
+      <span id="ageup-next" class="ageup-next">1</span>
+    </button>
+    <button class="btn btn-nav" data-modal="activities">Do<br><small>Activities</small></button>
+    <button class="btn btn-nav" data-modal="relationships">People<br><small>Relations</small></button>
+    <button class="btn btn-nav" data-modal="career">Work<br><small>Career</small></button>
+    <button class="btn btn-nav" data-modal="education">Learn<br><small>Education</small></button>
+    <button class="btn btn-nav" data-modal="assets">Assets<br><small>Finance</small></button>
+    <button class="btn btn-nav btn-cheat" data-modal="cheats">Cheats<br><small>God Mode</small></button>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════ DEATH SCREEN ═══════════════════════ -->
+<div id="screen-death" class="screen">
+  <div class="death-wrap">
+    <div class="death-icon"></div>
+    <h2 class="death-title">Rest in Peace</h2>
+    <div id="death-name" class="death-name"></div>
+    <div id="death-years" class="death-years"></div>
+    <div id="death-cause" class="death-cause"></div>
+    <div id="death-stats" class="death-stats-grid"></div>
+    <div id="death-highlights" class="death-highlights"></div>
+    <div id="death-achievements" class="death-achievements"></div>
+    <div id="cheats-watermark" class="cheats-watermark hidden">Cheats were used</div>
+    <div class="death-actions">
+      <button class="btn btn-primary btn-lg" id="btn-new-life-2">New Life</button>
+      <button class="btn btn-ghost btn-lg" onclick="UI.showScreen('intro')">Main Menu</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ EVENT MODAL ═══════════════════════ -->
+<div id="modal-event" class="overlay hidden">
+  <div class="modal">
+    <div id="evt-category" class="evt-category">Life Event</div>
+    <h3 id="evt-title" class="evt-title"></h3>
+    <p id="evt-desc" class="evt-desc"></p>
+    <div id="evt-choices" class="evt-choices"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ ACTIVITIES MODAL ═══════════════════════ -->
+<div id="modal-activities" class="overlay hidden">
+  <div class="modal modal-tall">
+    <div class="modal-hdr">
+      <h3>Activities</h3>
+      <button class="close-btn" data-close="activities">x</button>
+    </div>
+    <div id="activities-content" class="modal-body"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ RELATIONSHIPS MODAL ═══════════════════════ -->
+<div id="modal-relationships" class="overlay hidden">
+  <div class="modal modal-tall">
+    <div class="modal-hdr">
+      <h3>Relationships</h3>
+      <button class="close-btn" data-close="relationships">x</button>
+    </div>
+    <div id="relationships-content" class="modal-body"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ REL ACTION ═══════════════════════ -->
+<div id="modal-relaction" class="overlay hidden">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h3 id="relaction-title">Relationship</h3>
+      <button class="close-btn" data-close="relaction">x</button>
+    </div>
+    <div id="relaction-content" class="modal-body"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ CAREER MODAL ═══════════════════════ -->
+<div id="modal-career" class="overlay hidden">
+  <div class="modal modal-tall">
+    <div class="modal-hdr">
+      <h3>Career</h3>
+      <button class="close-btn" data-close="career">x</button>
+    </div>
+    <div id="career-content" class="modal-body"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ EDUCATION MODAL ═══════════════════════ -->
+<div id="modal-education" class="overlay hidden">
+  <div class="modal modal-tall">
+    <div class="modal-hdr">
+      <h3>Education</h3>
+      <button class="close-btn" data-close="education">x</button>
+    </div>
+    <div id="education-content" class="modal-body"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ ASSETS MODAL ═══════════════════════ -->
+<div id="modal-assets" class="overlay hidden">
+  <div class="modal modal-tall">
+    <div class="modal-hdr">
+      <h3>Assets & Finance</h3>
+      <button class="close-btn" data-close="assets">x</button>
+    </div>
+    <div id="assets-content" class="modal-body"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ CHEATS MODAL ═══════════════════════ -->
+<div id="modal-cheats" class="overlay hidden">
+  <div class="modal modal-tall">
+    <div class="modal-hdr">
+      <h3>Cheat Panel <span class="badge badge-cheat">GOD MODE</span></h3>
+      <button class="close-btn" data-close="cheats">x</button>
+    </div>
+    <div id="cheats-content" class="modal-body"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ LIFE LOG MODAL ═══════════════════════ -->
+<div id="modal-log" class="overlay hidden">
+  <div class="modal modal-tall">
+    <div class="modal-hdr">
+      <h3>Life Log</h3>
+      <button class="close-btn" data-close="log">x</button>
+    </div>
+    <div id="log-content" class="modal-body"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ TOAST ═══════════════════════ -->
+<div id="toast-zone"></div>
+
+<!-- ═══════════════════════ SCRIPTS ═══════════════════════ -->
+<script src="js/data.js"></script>
+<script src="js/state.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/cheats.js"></script>
+<script src="js/main.js"></script>
+
+</body>
+</html>
