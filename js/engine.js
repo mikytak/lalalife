@@ -139,6 +139,7 @@ const Engine = (() => {
     applyMoodDrift(c);
     applyPassiveEffects(c, g);
     processConditions(c);
+    processAddictions(c);
     updateEducation(c, g);
     updateCareerPerformance(c);
     applyHobbyPassiveGains(c);
@@ -149,6 +150,10 @@ const Engine = (() => {
     checkAnniversary(c, g);
     checkMidlifeCrisis(c);
     checkLifeGoal(c, g);
+    checkFameEvents(c, g);
+    processStartup(c);
+    processJail(c);
+    applyTherapyPassive(c);
     c.negotiatedThisYear = false; // reset each year
 
     const stage = DATA.getStage(c.age);
@@ -555,6 +560,8 @@ const Engine = (() => {
   function workHard() {
     const c = State.getChar();
     if (!c.career.jobId) return { ok:false, msg:'No job!' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy to work hard. Age up to rest.' };
+    spendEnergy();
     c.career.performance = State.clampStat(c.career.performance + 15);
     State.applyEffects({ health:-5, happiness:-5 });
     State.addLog(c.age, 'Worked extra hard this year.', 'career');
@@ -1389,6 +1396,18 @@ const Engine = (() => {
     }
   }
 
+  // ── Addiction passive drain ───────────────────────────────────
+  function processAddictions(c) {
+    if (!c.addictions || !c.addictions.length) return;
+    c.addictions.forEach(a => {
+      const drain = a.severity;
+      c.health      = State.clampStat(c.health      - drain * 2);
+      c.happiness   = State.clampStat(c.happiness   - drain * 3);
+      c.mentalHealth= State.clampStat(c.mentalHealth - drain * 2);
+      if (drain >= 3) c.money = Math.max(0, c.money - 500 * drain); // feeding the habit
+    });
+  }
+
   // ── Health conditions ─────────────────────────────────────────
   function processConditions(c) {
     c.conditions.forEach(condId => {
@@ -1690,6 +1709,8 @@ const Engine = (() => {
       // Bucket list completions
       const bucketCompleted = (c.bucketList || []).filter(b => b.completed).length;
       pts += bucketCompleted * 75;
+      if (c.will) pts += c.will.legacyBonus || 0;
+      if (c.lifeGoalCompleted) pts += 120;
       legacy.totalPoints = (legacy.totalPoints || 0) + pts;
       localStorage.setItem(LEGACY_KEY, JSON.stringify(legacy));
       return { gained: pts, total: legacy.totalPoints, lives: legacy.lives };
@@ -1714,6 +1735,466 @@ const Engine = (() => {
     const legacy = loadLegacy();
     const bonuses = getLegacyBonuses(legacy.totalPoints);
     return { ...legacy, bonuses };
+  }
+
+  // ── Kid interactions ──────────────────────────────────────────
+  function childAction(relId, actionId) {
+    const g = State.get(); const c = g.character;
+    const child = g.relationships.find(r => r.id === relId && r.subtype === 'child');
+    if (!child) return { ok:false, msg:'Child not found.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    spendEnergy();
+    let msg = '';
+    const childAge = child.age || 0;
+    switch (actionId) {
+      case 'play':
+        child.relationship = Math.min(100, child.relationship + 10);
+        State.applyEffects({ happiness: 12 });
+        msg = `Played with ${child.name}. Both of you had a great time.`; break;
+      case 'homework':
+        if (childAge < 6) return { ok:false, msg:`${child.name} is too young for homework.` };
+        child.relationship = Math.min(100, child.relationship + 8);
+        State.applyEffects({ happiness: 8 });
+        msg = `Helped ${child.name} with homework. Bond strengthened.`; break;
+      case 'bedtime_story':
+        if (childAge > 10) return { ok:false, msg:`${child.name} is too old for bedtime stories.` };
+        child.relationship = Math.min(100, child.relationship + 12);
+        State.applyEffects({ happiness: 15 });
+        msg = `Read ${child.name} a bedtime story. A precious memory.`; break;
+      case 'park':
+        child.relationship = Math.min(100, child.relationship + 9);
+        State.applyEffects({ happiness: 10, health: 3 });
+        c.money -= 20; if (c.money < 0) c.money = 0;
+        msg = `Took ${child.name} to the park. Fresh air for everyone.`; break;
+      case 'heart_to_heart':
+        if (childAge < 13) return { ok:false, msg:`${child.name} is too young for a heart-to-heart.` };
+        child.relationship = Math.min(100, child.relationship + 15);
+        State.applyEffects({ happiness: 10, mentalHealth: 5 });
+        msg = `Had a heart-to-heart with ${child.name}. You feel closer than ever.`; break;
+      case 'teach_skill': {
+        if (childAge < 5) return { ok:false, msg:`${child.name} is too young.` };
+        const skills = ['cooking', 'music', 'sports', 'art', 'reading'];
+        const skill = DATA.randomFrom(skills);
+        child.relationship = Math.min(100, child.relationship + 7);
+        State.applyEffects({ happiness: 8 });
+        msg = `Taught ${child.name} about ${skill}. They loved it!`; break;
+      }
+      case 'family_game_night':
+        child.relationship = Math.min(100, child.relationship + 11);
+        State.applyEffects({ happiness: 14 });
+        c.money -= 30; if (c.money < 0) c.money = 0;
+        msg = `Family game night with ${child.name}! Laughter all around.`; break;
+      case 'ground':
+        if (childAge < 13) return { ok:false, msg:`${child.name} is too young to ground.` };
+        child.relationship = Math.max(0, child.relationship - 10);
+        State.applyEffects({ happiness: -5 });
+        msg = `Grounded ${child.name}. They're furious, but it had to be done.`; break;
+      default:
+        return { ok:false, msg:'Unknown action.' };
+    }
+    State.addLog(c.age, msg, 'rel');
+    State.saveGame();
+    return { ok:true, msg };
+  }
+
+  // ── Partying ──────────────────────────────────────────────────
+  function goParty(type) {
+    const c = State.getChar();
+    if (c.age < 16) return { ok:false, msg:'Too young to party.' };
+    if (type === 'club' && c.age < 18) return { ok:false, msg:'Must be 18+ for clubs.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    spendEnergy();
+    if (type === 'club') {
+      const cost = 60 + Math.floor(Math.random() * 80);
+      if (c.money < cost) return { ok:false, msg:`Need at least ${DATA.fmtMoney(cost)} for a night out.` };
+      c.money -= cost;
+      const wildNight = Math.random() < 0.25;
+      State.applyEffects({ happiness: wildNight ? 25 : 15, health: wildNight ? -8 : -3 });
+      const msg = wildNight ? `Wild night out at the club! Spent ${DATA.fmtMoney(cost)}, memories made.` : `Night at the club. Danced, laughed, spent ${DATA.fmtMoney(cost)}.`;
+      State.addLog(c.age, msg, 'activity');
+      State.saveGame();
+      return { ok:true, msg };
+    } else {
+      // house party — free, younger allowed
+      State.applyEffects({ happiness: 12, health: -2 });
+      const metSomeone = Math.random() < 0.3 && !State.getPartner() && c.age >= 16 && c.sexuality !== 'asexual';
+      let msg = 'Fun house party! Good vibes.';
+      if (metSomeone) {
+        const gen = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender === 'male' ? 'female' : 'male');
+        const nm  = DATA.randomName(gen);
+        State.addRelationship({ name:nm.full, type:'partner', subtype:'crush', age:c.age+Math.floor(Math.random()*4)-2, relationship:40, traits:DATA.randomTraits(2), status:'active' });
+        msg = `Met someone cute at a party — ${nm.full}. Sparks flew!`;
+      }
+      State.addLog(c.age, msg, 'activity');
+      State.saveGame();
+      return { ok:true, msg };
+    }
+  }
+
+  // ── Substances ────────────────────────────────────────────────
+  const SUBSTANCES = {
+    alcohol:  { label:'Drink Alcohol',   minAge:18, cost:30,  happy:12, health:-4,  mental:-2,  addictChance:0.08, addictLabel:'Alcohol Dependence' },
+    weed:     { label:'Smoke Weed',      minAge:18, cost:40,  happy:15, health:-3,  mental:3,   addictChance:0.06, addictLabel:'Cannabis Habit' },
+    pills:    { label:'Take Party Pills',minAge:18, cost:60,  happy:22, health:-8,  mental:-5,  addictChance:0.15, addictLabel:'Pill Dependency' },
+    cocaine:  { label:'Try Cocaine',     minAge:18, cost:150, happy:28, health:-15, mental:-10, addictChance:0.30, addictLabel:'Cocaine Addiction' },
+  };
+
+  function useSubstance(substanceId) {
+    const c = State.getChar();
+    const sub = SUBSTANCES[substanceId];
+    if (!sub) return { ok:false, msg:'Unknown substance.' };
+    if (c.age < sub.minAge) return { ok:false, msg:`Must be ${sub.minAge}+.` };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    if (c.money < sub.cost) return { ok:false, msg:`Need ${DATA.fmtMoney(sub.cost)}.` };
+    spendEnergy();
+    c.money -= sub.cost;
+    State.applyEffects({ happiness: sub.happy, health: sub.health, mentalHealth: sub.mental });
+    // Addiction check
+    c.substances = c.substances || {};
+    c.substances[substanceId] = (c.substances[substanceId] || 0) + 1;
+    const timesUsed = c.substances[substanceId];
+    const addictRoll = Math.random() < (sub.addictChance * (1 + timesUsed * 0.05));
+    c.addictions = c.addictions || [];
+    const alreadyAddicted = c.addictions.find(a => a.id === substanceId);
+    if (addictRoll && !alreadyAddicted) {
+      c.addictions.push({ id:substanceId, label:sub.addictLabel, severity:1 });
+      State.addLog(c.age, `Developed ${sub.addictLabel}.`, 'bad');
+      UI.showToast(`You developed ${sub.addictLabel}. This could get out of hand.`, 'bad');
+    } else if (alreadyAddicted && Math.random() < 0.2) {
+      alreadyAddicted.severity = Math.min(3, alreadyAddicted.severity + 1);
+    }
+    const msg = `Used ${sub.label.toLowerCase()}.`;
+    State.addLog(c.age, msg, 'activity');
+    State.saveGame();
+    return { ok:true, msg, addicted: addictRoll && !alreadyAddicted };
+  }
+
+  function seekRehab() {
+    const c = State.getChar();
+    if (!c.addictions || !c.addictions.length) return { ok:false, msg:'No addictions to treat.' };
+    const cost = 8000;
+    if (c.money < cost) return { ok:false, msg:`Rehab costs ${DATA.fmtMoney(cost)}.` };
+    c.money -= cost;
+    const cleared = c.addictions.filter(a => Math.random() < (0.6 / a.severity));
+    const remaining = c.addictions.filter(a => !cleared.find(cl => cl.id === a.id));
+    c.addictions = remaining;
+    remaining.forEach(a => { a.severity = Math.max(1, a.severity - 1); });
+    const msg = cleared.length
+      ? `Rehab cleared ${cleared.map(a=>a.label).join(', ')}.${remaining.length ? ' Still working on the rest.' : ' Clean!'}`
+      : 'Rehab helped but the addiction persists. Consider trying again.';
+    State.applyEffects({ mentalHealth: 15, happiness: cleared.length ? 10 : 0 });
+    State.addLog(c.age, msg, 'good');
+    State.saveGame();
+    return { ok:true, msg };
+  }
+
+  // ── Therapy ───────────────────────────────────────────────────
+  function startTherapy() {
+    const c = State.getChar();
+    if (c.inTherapy) return { ok:false, msg:'Already in therapy.' };
+    const cost = 3000;
+    if (c.money < cost) return { ok:false, msg:`Therapy costs ${DATA.fmtMoney(cost)}/year.` };
+    c.inTherapy = true;
+    c.money -= cost;
+    State.addLog(c.age, 'Started therapy.', 'good');
+    State.saveGame();
+    return { ok:true, msg:'Started therapy. Mental health will improve over time.' };
+  }
+
+  function stopTherapy() {
+    const c = State.getChar();
+    if (!c.inTherapy) return { ok:false, msg:'Not in therapy.' };
+    c.inTherapy = false;
+    State.addLog(c.age, 'Stopped therapy.', 'event');
+    State.saveGame();
+    return { ok:true, msg:'Stopped attending therapy.' };
+  }
+
+  function applyTherapyPassive(c) {
+    if (!c.inTherapy) return;
+    const cost = 3000;
+    if (c.money < cost) { c.inTherapy = false; State.addLog(c.age, 'Could not afford therapy — sessions cancelled.', 'bad'); return; }
+    c.money -= cost;
+    c.mentalHealth = State.clampStat((c.mentalHealth || 80) + 12);
+    c.happiness    = State.clampStat(c.happiness + 4);
+    // Mild addiction help
+    if (c.addictions && c.addictions.length) {
+      c.addictions.forEach(a => {
+        if (Math.random() < 0.15) a.severity = Math.max(0, a.severity - 1);
+      });
+      c.addictions = c.addictions.filter(a => a.severity > 0);
+    }
+  }
+
+  // ── College social life ───────────────────────────────────────
+  function collegeAction(actionId) {
+    const c = State.getChar();
+    const edu = c.education;
+    if (!edu.inSchool || edu.schoolType !== 'university') return { ok:false, msg:'Must be enrolled in university.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    spendEnergy();
+    switch (actionId) {
+      case 'frat': {
+        if (c.joinedFrat) return { ok:false, msg:'Already in a frat/sorority.' };
+        c.joinedFrat = true;
+        State.applyEffects({ happiness: 15 });
+        const nm = DATA.randomName(DATA.getAttractedGender(c.gender, c.sexuality) || 'male');
+        State.addRelationship({ name:nm.full, type:'friend', subtype:'friend', age:c.age+Math.floor(Math.random()*3)-1, relationship:55, traits:DATA.randomTraits(2), status:'active' });
+        State.addLog(c.age, `Joined a frat/sorority. Made new friends.`, 'activity');
+        State.saveGame();
+        return { ok:true, msg:'Pledged! Instant social life boost and a new friend.' };
+      }
+      case 'all_nighter': {
+        State.applyEffects({ health:-8, happiness:-5 });
+        edu.gpa = Math.min(4.0, +(((edu.gpa||2.5) + 0.2).toFixed(2)));
+        State.addLog(c.age, `Pulled an all-nighter. GPA up to ${edu.gpa.toFixed(2)}.`, 'edu');
+        State.saveGame();
+        return { ok:true, msg:`Exhausting but worth it. GPA now ${edu.gpa.toFixed(2)}.` };
+      }
+      case 'college_party': {
+        State.applyEffects({ happiness: 18, health:-3 });
+        const metSomeone = Math.random() < 0.35 && !State.getPartner() && c.sexuality !== 'asexual';
+        if (metSomeone) {
+          const gen = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender==='male'?'female':'male');
+          const nm = DATA.randomName(gen);
+          State.addRelationship({ name:nm.full, type:'partner', subtype:'crush', age:c.age+Math.floor(Math.random()*3)-1, relationship:45, traits:DATA.randomTraits(2), status:'active' });
+          State.addLog(c.age, `Wild college party! Met ${nm.full}.`, 'activity');
+          State.saveGame();
+          return { ok:true, msg:`Great party — and you met someone: ${nm.full}!` };
+        }
+        State.addLog(c.age, 'Wild college party! Great night.', 'activity');
+        State.saveGame();
+        return { ok:true, msg:'Wild night. Happiness way up, health a bit down.' };
+      }
+      case 'study_group': {
+        edu.gpa = Math.min(4.0, +(((edu.gpa||2.5) + 0.1).toFixed(2)));
+        State.applyEffects({ happiness: 5 });
+        const nm = DATA.randomName(Math.random()<0.5?'female':'male');
+        if (Math.random() < 0.25) {
+          State.addRelationship({ name:nm.full, type:'friend', subtype:'friend', age:c.age+Math.floor(Math.random()*3)-1, relationship:45, traits:DATA.randomTraits(2), status:'active' });
+          State.addLog(c.age, `Study group. GPA up. Made a friend: ${nm.full}.`, 'edu');
+          State.saveGame();
+          return { ok:true, msg:`Studied in a group. GPA now ${edu.gpa.toFixed(2)} and made a new friend!` };
+        }
+        State.addLog(c.age, `Study group. GPA up to ${edu.gpa.toFixed(2)}.`, 'edu');
+        State.saveGame();
+        return { ok:true, msg:`Study group paid off. GPA now ${edu.gpa.toFixed(2)}.` };
+      }
+      default: return { ok:false, msg:'Unknown action.' };
+    }
+  }
+
+  // ── Cheating ──────────────────────────────────────────────────
+  function cheatOnPartner() {
+    const g = State.get(); const c = g.character;
+    const partner = g.relationships.find(r => r.type==='partner' && r.status==='active');
+    if (!partner) return { ok:false, msg:'No partner to cheat on.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    spendEnergy();
+    const caughtChance = 0.35;
+    const caught = Math.random() < caughtChance;
+    const gen = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender==='male'?'female':'male');
+    const nm = DATA.randomName(gen);
+    c.cheatedCount = (c.cheatedCount || 0) + 1;
+    if (caught) {
+      partner.relationship = Math.max(0, partner.relationship - 40);
+      State.applyEffects({ happiness:-15, mentalHealth:-10 });
+      if (partner.relationship < 20) {
+        _applyDivorceSettlement(c, partner);
+        partner.status='divorced'; partner.type='ex';
+        State.addLog(c.age, `Cheated with ${nm.full} and got caught. ${partner.name} left you.`, 'bad');
+        State.saveGame();
+        return { ok:true, caught:true, divorced:true, msg:`Caught cheating! ${partner.name} found out and left you.` };
+      }
+      State.addLog(c.age, `Cheated with ${nm.full}. Got caught — relationship badly damaged.`, 'bad');
+      State.saveGame();
+      return { ok:true, caught:true, msg:`Caught! ${partner.name} is furious. Relationship tanked.` };
+    }
+    State.applyEffects({ happiness: 10 });
+    State.addLog(c.age, `Had an affair with ${nm.full}. Got away with it... for now.`, 'event');
+    State.saveGame();
+    return { ok:true, caught:false, msg:`Secret affair with ${nm.full}. Nobody knows... yet.` };
+  }
+
+  // ── Business / Startup ────────────────────────────────────────
+  const STARTUP_TYPES = [
+    { id:'tech',    label:'Tech Startup',       minInvest:20000,  risk:0.55, multWin:4.0, multLose:0.1 },
+    { id:'food',    label:'Restaurant / Café',  minInvest:15000,  risk:0.45, multWin:2.5, multLose:0.3 },
+    { id:'retail',  label:'Retail Store',       minInvest:8000,   risk:0.40, multWin:2.0, multLose:0.4 },
+    { id:'online',  label:'Online Business',    minInvest:2000,   risk:0.50, multWin:3.0, multLose:0.2 },
+    { id:'realestate', label:'Real Estate Flip',minInvest:30000,  risk:0.45, multWin:2.0, multLose:0.5 },
+  ];
+
+  function launchStartup(typeId, investAmount) {
+    const c = State.getChar();
+    const biz = STARTUP_TYPES.find(b => b.id === typeId);
+    if (!biz) return { ok:false, msg:'Unknown business type.' };
+    if (c.activeStartup) return { ok:false, msg:'Already running a startup. Wait for it to resolve.' };
+    if (investAmount < biz.minInvest) return { ok:false, msg:`Minimum investment: ${DATA.fmtMoney(biz.minInvest)}.` };
+    if (c.money < investAmount) return { ok:false, msg:'Not enough money.' };
+    c.money -= investAmount;
+    c.activeStartup = { typeId, label:biz.label, invested:investAmount, yearsRunning:0 };
+    State.addLog(c.age, `Launched ${biz.label} with ${DATA.fmtMoney(investAmount)} investment.`, 'career');
+    State.saveGame();
+    return { ok:true, msg:`${biz.label} launched! Results in 2–4 years.` };
+  }
+
+  function processStartup(c) {
+    if (!c.activeStartup) return;
+    c.activeStartup.yearsRunning++;
+    const biz = STARTUP_TYPES.find(b => b.id === c.activeStartup.typeId);
+    if (!biz) { c.activeStartup = null; return; }
+    if (c.activeStartup.yearsRunning < 2) return; // minimum 2 years
+    const resolveChance = c.activeStartup.yearsRunning >= 4 ? 0.7 : 0.35;
+    if (Math.random() > resolveChance) return;
+    const success = Math.random() > biz.risk;
+    const invested = c.activeStartup.invested;
+    const mult = success ? biz.multWin : biz.multLose;
+    const payout = Math.round(invested * mult);
+    c.money += payout;
+    const profit = payout - invested;
+    c.activeStartup = null;
+    if (success) {
+      State.applyEffects({ happiness:20 });
+      State.addLog(c.age, `${biz.label} took off! Earned ${DATA.fmtMoney(payout)} (profit: ${DATA.fmtMoney(profit)}).`, 'good');
+      UI.showToast(`Business success! +${DATA.fmtMoney(profit)} profit.`, 'good');
+    } else {
+      State.applyEffects({ happiness:-15 });
+      State.addLog(c.age, `${biz.label} failed. Recovered only ${DATA.fmtMoney(payout)} of ${DATA.fmtMoney(invested)}.`, 'bad');
+      UI.showToast(`Business failed. Lost ${DATA.fmtMoney(invested - payout)}.`, 'bad');
+    }
+  }
+
+  // ── Crime ─────────────────────────────────────────────────────
+  const CRIMES = {
+    petty_theft:    { label:'Petty Theft',     minAge:16, reward:[100,800],   jailChance:0.12, jailYears:1, bail:500   },
+    shoplifting:    { label:'Shoplifting',      minAge:14, reward:[20,200],    jailChance:0.08, jailYears:1, bail:200   },
+    fraud:          { label:'Fraud',            minAge:18, reward:[3000,15000],jailChance:0.22, jailYears:3, bail:5000  },
+    money_launder:  { label:'Money Laundering', minAge:21, reward:[10000,50000],jailChance:0.30, jailYears:5, bail:20000 },
+    drug_dealing:   { label:'Drug Dealing',     minAge:16, reward:[500,3000],  jailChance:0.25, jailYears:2, bail:3000  },
+  };
+
+  function commitCrime(crimeId) {
+    const g = State.get(); const c = g.character;
+    const crime = CRIMES[crimeId];
+    if (!crime) return { ok:false, msg:'Unknown crime.' };
+    if (c.age < crime.minAge) return { ok:false, msg:`Must be ${crime.minAge}+.` };
+    if (c.inJail) return { ok:false, msg:'Already in jail.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left.' };
+    spendEnergy();
+    if (Math.random() < crime.jailChance) {
+      c.inJail = true;
+      c.jailYearsLeft = crime.jailYears;
+      c.jailBail = crime.bail;
+      // Lose job
+      if (c.career.jobId) quitJob(true);
+      State.applyEffects({ happiness:-25, mentalHealth:-15 });
+      State.addLog(c.age, `Arrested for ${crime.label}! Sentenced to ${crime.jailYears} year(s).`, 'bad');
+      UI.showToast(`Busted! Arrested for ${crime.label}.`, 'bad');
+      State.saveGame();
+      return { ok:true, arrested:true, msg:`Arrested! ${crime.jailYears} year sentence.` };
+    }
+    const reward = crime.reward[0] + Math.floor(Math.random() * (crime.reward[1] - crime.reward[0]));
+    c.money += reward;
+    c.criminalRecord = true;
+    State.applyEffects({ happiness: 8 });
+    State.addLog(c.age, `${crime.label}: got away with ${DATA.fmtMoney(reward)}.`, 'event');
+    State.saveGame();
+    return { ok:true, arrested:false, msg:`Got away with it. +${DATA.fmtMoney(reward)}.` };
+  }
+
+  function payBail() {
+    const c = State.getChar();
+    if (!c.inJail) return { ok:false, msg:'Not in jail.' };
+    if (c.money < c.jailBail) return { ok:false, msg:`Bail is ${DATA.fmtMoney(c.jailBail)}.` };
+    c.money -= c.jailBail;
+    c.inJail = false; c.jailYearsLeft = 0;
+    State.addLog(c.age, `Paid bail (${DATA.fmtMoney(c.jailBail)}) and released.`, 'event');
+    State.saveGame();
+    return { ok:true, msg:'Bailed out. Back on the streets.' };
+  }
+
+  function processJail(c) {
+    if (!c.inJail) return;
+    State.applyEffects({ happiness:-10, mentalHealth:-8 });
+    c.jailYearsLeft--;
+    if (c.jailYearsLeft <= 0) {
+      c.inJail = false;
+      c.criminalRecord = true;
+      State.addLog(c.age, 'Released from jail. Criminal record follows you.', 'event');
+      UI.showToast('Released from jail.', 'info');
+    }
+  }
+
+  // ── Fame perks & problems ─────────────────────────────────────
+  function checkFameEvents(c, g) {
+    const fame = c.fame || 0;
+    if (fame < 40) return;
+    const roll = Math.random();
+    if (fame >= 60 && roll < 0.12) {
+      // Perk: free VIP access / gift
+      const bonus = Math.round(500 + Math.random() * 2000);
+      c.money += bonus;
+      State.applyEffects({ happiness:10 });
+      State.addLog(c.age, `VIP perks of fame: received freebies worth ${DATA.fmtMoney(bonus)}.`, 'good');
+      return;
+    }
+    if (fame >= 50 && roll < 0.22) {
+      // Problem: tabloid scandal
+      const effects = Math.random() < 0.5;
+      if (effects) {
+        State.applyEffects({ happiness:-12, mentalHealth:-8 });
+        c.fame = Math.max(0, c.fame - 8);
+        State.addLog(c.age, 'Tabloid scandal! Fake rumours everywhere. Fame took a hit.', 'bad');
+        UI.showToast('Tabloid scandal! Mental health and fame hit.', 'bad');
+      } else {
+        c.fame = Math.min(100, c.fame + 5);
+        State.addLog(c.age, 'Tabloid story — any publicity is good publicity. Fame up!', 'event');
+      }
+      return;
+    }
+    if (fame >= 70 && roll < 0.30) {
+      // Problem: paparazzi / stalker
+      State.applyEffects({ happiness:-8, mentalHealth:-10 });
+      State.addLog(c.age, 'Paparazzi won\'t leave you alone. Privacy gone, mental health hit.', 'bad');
+    }
+  }
+
+  // ── Aging parent care ─────────────────────────────────────────
+  function careForParent(relId) {
+    const g = State.get(); const c = g.character;
+    const parent = g.relationships.find(r => r.id === relId && (r.subtype==='father'||r.subtype==='mother') && r.status==='active');
+    if (!parent) return { ok:false, msg:'Parent not found.' };
+    if (parent.age < 70) return { ok:false, msg:`${parent.name} is not elderly yet.` };
+    const cost = parent.age >= 85 ? 12000 : 6000;
+    if (c.money < cost) return { ok:false, msg:`Care costs ${DATA.fmtMoney(cost)}/year.` };
+    c.money -= cost;
+    parent.relationship = Math.min(100, parent.relationship + 15);
+    parent.caredFor = true;
+    State.applyEffects({ happiness: 10, mentalHealth: 5 });
+    State.addLog(c.age, `Arranged care for ${parent.name}. Bond deepened.`, 'rel');
+    State.saveGame();
+    return { ok:true, msg:`${parent.name} is cared for. Bond strengthened.` };
+  }
+
+  // ── Will / estate planning ────────────────────────────────────
+  const WILL_OPTIONS = [
+    { id:'family',   label:'Leave everything to family',   desc:'Assets split among spouse & children', legacyBonus:60 },
+    { id:'charity',  label:'Donate to charity',            desc:'Most assets go to charity', legacyBonus:100 },
+    { id:'children', label:'Leave to children only',       desc:'Children each inherit equally', legacyBonus:50 },
+    { id:'spouse',   label:'Leave everything to spouse',   desc:'Spouse inherits all assets', legacyBonus:40 },
+    { id:'trust',    label:'Set up a trust fund',          desc:'Wealth preserved across generations +big legacy bonus', legacyBonus:150 },
+  ];
+
+  function writeWill(optionId) {
+    const c = State.getChar();
+    if (c.age < 30) return { ok:false, msg:'A bit early to write a will. Come back at 30+.' };
+    const opt = WILL_OPTIONS.find(w => w.id === optionId);
+    if (!opt) return { ok:false, msg:'Unknown will option.' };
+    c.will = { optionId, label:opt.label, legacyBonus:opt.legacyBonus };
+    State.addLog(c.age, `Wrote a will: ${opt.label}.`, 'activity');
+    State.saveGame();
+    return { ok:true, msg:`Will written: ${opt.label}.` };
   }
 
   // ── Divorce settlement ────────────────────────────────────────
@@ -1850,7 +2331,10 @@ const Engine = (() => {
     setLifeGoal, LIFE_GOALS,
     buyHouse, sellHouse, buyCar, sellCar, invest, casino,
     relationshipAction, planWedding, askFriendOut, planChild,
-    doActivity, buyItem,
+    doActivity, buyItem, goParty, useSubstance, seekRehab, childAction, SUBSTANCES,
+    startTherapy, stopTherapy, collegeAction, cheatOnPartner,
+    launchStartup, STARTUP_TYPES, commitCrime, payBail, CRIMES,
+    careForParent, writeWill, WILL_OPTIONS,
     startHobby, practiceHobby,
     joinExtracurricular, participateExtracurricular,
     socializeAtSchool, meetRomanticInterest,

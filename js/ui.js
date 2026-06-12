@@ -417,6 +417,67 @@ const UI = (() => {
       div.appendChild(adoptBtn);
     }
 
+    // ── Nightlife & Partying (age 16+) ────────────────────────
+    if (c.age >= 16) {
+      const partyHdr = document.createElement('div'); partyHdr.className = 'section-title'; partyHdr.textContent = 'Nightlife'; div.appendChild(partyHdr);
+      const partyTypes = [
+        { id:'house', label:'House Party',   sub:'Free · meet people · 1 energy', age:16 },
+        { id:'club',  label:'Night at the Club', sub:'$60–140 · wild fun · 1 energy', age:18 },
+      ];
+      partyTypes.forEach(pt => {
+        if (c.age < pt.age) return;
+        const btn = document.createElement('div'); btn.className = 'item-card clickable';
+        btn.innerHTML = `<div class="item-top"><div class="item-icon ic-rose">Pt</div><div class="item-info"><div class="item-name">${pt.label}</div><div class="item-sub">${pt.sub}</div></div></div>`;
+        btn.addEventListener('click', () => {
+          const r = Engine.goParty(pt.id);
+          showToast(r.msg, r.ok ? 'good' : 'bad');
+          if (r.ok) { updateDisplay(); renderActivities(); }
+        });
+        div.appendChild(btn);
+      });
+    }
+
+    // ── Substances (age 18+) ──────────────────────────────────
+    if (c.age >= 18) {
+      const subHdr = document.createElement('div'); subHdr.className = 'section-title'; subHdr.textContent = 'Substances'; div.appendChild(subHdr);
+      const subs = Object.entries(Engine.SUBSTANCES);
+      subs.forEach(([id, sub]) => {
+        const canAff = c.money >= sub.cost;
+        const card = document.createElement('div'); card.className = `item-card${canAff ? ' clickable' : ''}`;
+        const addicted = (c.addictions||[]).find(a => a.id === id);
+        const riskColor = sub.addictChance >= 0.2 ? 'var(--red)' : sub.addictChance >= 0.1 ? 'var(--yellow)' : 'var(--accent)';
+        card.innerHTML = `
+          <div class="item-top">
+            <div class="item-icon" style="background:${riskColor};color:#fff;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700">Sub</div>
+            <div class="item-info">
+              <div class="item-name">${sub.label}</div>
+              <div class="item-sub">${DATA.fmtMoney(sub.cost)} · +${sub.happy} mood · ${sub.health} health</div>
+              <div class="item-detail" style="color:${riskColor}">Addiction risk: ${Math.round(sub.addictChance*100)}%${addicted ? ` · <span style="color:var(--red)">ADDICTED (sev. ${addicted.severity})</span>` : ''}</div>
+            </div>
+          </div>`;
+        if (canAff) {
+          card.addEventListener('click', () => {
+            const r = Engine.useSubstance(id);
+            showToast(r.msg, r.ok ? 'good' : 'bad');
+            if (r.ok) { updateDisplay(); renderActivities(); }
+          });
+        }
+        div.appendChild(card);
+      });
+      // Rehab button if addicted
+      if ((c.addictions||[]).length > 0) {
+        const rehabCard = document.createElement('div'); rehabCard.className = 'item-card clickable';
+        rehabCard.style.borderColor = 'var(--green)';
+        rehabCard.innerHTML = `<div class="item-top"><div class="item-icon" style="background:var(--green);color:#fff;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700">Rh</div><div class="item-info"><div class="item-name">Seek Rehab</div><div class="item-sub">$8,000 · chance to clear addictions</div><div class="item-detail text-dim">Addictions: ${c.addictions.map(a=>a.label).join(', ')}</div></div></div>`;
+        rehabCard.addEventListener('click', () => {
+          const r = Engine.seekRehab();
+          showToast(r.msg, r.ok ? 'good' : 'bad');
+          if (r.ok) { updateDisplay(); renderActivities(); }
+        });
+        div.appendChild(rehabCard);
+      }
+    }
+
     // ── Social Media (age 13+) ─────────────────────────────────
     if (c.age >= 13) {
       const smHdr = document.createElement('div'); smHdr.className = 'section-title'; smHdr.textContent = 'Social Media'; div.appendChild(smHdr);
@@ -440,6 +501,126 @@ const UI = (() => {
         });
         div.appendChild(card);
       });
+    }
+
+    // ── Therapy (age 16+) ────────────────────────────────────
+    if (c.age >= 16) {
+      const therapyHdr = document.createElement('div'); therapyHdr.className = 'section-title'; therapyHdr.textContent = 'Mental Health'; div.appendChild(therapyHdr);
+      const therapyCard = document.createElement('div'); therapyCard.className = 'item-card clickable';
+      const inTherapy = !!c.inTherapy;
+      therapyCard.innerHTML = `
+        <div class="item-top">
+          <div class="item-icon" style="background:var(--blue);color:#fff;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700">Th</div>
+          <div class="item-info">
+            <div class="item-name">${inTherapy ? 'In Therapy (active)' : 'Start Therapy'}</div>
+            <div class="item-sub">$3,000/year · +Mental Health, helps addictions</div>
+            <div class="item-detail" style="color:${inTherapy ? 'var(--green)' : 'var(--accent)'}">${inTherapy ? 'Ongoing — click to stop' : 'Mental Health: ' + (c.mentalHealth||80)}</div>
+          </div>
+        </div>`;
+      therapyCard.addEventListener('click', () => {
+        const r = inTherapy ? Engine.stopTherapy() : Engine.startTherapy();
+        showToast(r.msg, r.ok ? 'good' : 'bad');
+        updateDisplay(); renderActivities();
+      });
+      div.appendChild(therapyCard);
+    }
+
+    // ── Crime (age 14+) ──────────────────────────────────────
+    if (c.age >= 14) {
+      const crimeHdr = document.createElement('div'); crimeHdr.className = 'section-title'; crimeHdr.textContent = 'Illegal Activities'; div.appendChild(crimeHdr);
+      if (c.inJail) {
+        const jailCard = document.createElement('div'); jailCard.className = 'item-card';
+        jailCard.style.borderColor = 'var(--red)';
+        jailCard.innerHTML = `
+          <div class="item-info">
+            <div class="item-name" style="color:var(--red)">In Jail — ${c.jailYearsLeft} year(s) left</div>
+            <div class="item-sub">Bail: ${DATA.fmtMoney(c.jailBail)}</div>
+          </div>`;
+        div.appendChild(jailCard);
+        const bailBtn = document.createElement('button'); bailBtn.className = 'btn btn-danger btn-full mb-8';
+        bailBtn.textContent = `Pay Bail — ${DATA.fmtMoney(c.jailBail)}`;
+        bailBtn.disabled = c.money < (c.jailBail||0);
+        bailBtn.addEventListener('click', () => { const r=Engine.payBail(); showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
+        div.appendChild(bailBtn);
+      } else {
+        Object.entries(Engine.CRIMES).forEach(([id, crime]) => {
+          if (c.age < crime.minAge) return;
+          const card = document.createElement('div'); card.className = 'item-card clickable';
+          const riskColor = crime.jailChance >= 0.25 ? 'var(--red)' : crime.jailChance >= 0.15 ? 'var(--yellow)' : 'var(--accent)';
+          card.innerHTML = `
+            <div class="item-top">
+              <div class="item-icon" style="background:${riskColor};color:#fff;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700">Cr</div>
+              <div class="item-info">
+                <div class="item-name">${crime.label}</div>
+                <div class="item-sub">Reward: ${DATA.fmtMoney(crime.reward[0])}–${DATA.fmtMoney(crime.reward[1])}</div>
+                <div class="item-detail" style="color:${riskColor}">Jail risk: ${Math.round(crime.jailChance*100)}% · ${crime.jailYears} yr sentence</div>
+              </div>
+            </div>`;
+          card.addEventListener('click', () => { const r=Engine.commitCrime(id); showToast(r.msg,r.arrested?'bad':r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
+          div.appendChild(card);
+        });
+      }
+    }
+
+    // ── Startup / Business (age 18+) ─────────────────────────
+    if (c.age >= 18) {
+      const bizHdr = document.createElement('div'); bizHdr.className = 'section-title'; bizHdr.textContent = 'Business & Startup'; div.appendChild(bizHdr);
+      if (c.activeStartup) {
+        const startupCard = document.createElement('div'); startupCard.className = 'item-card';
+        startupCard.style.borderColor = 'var(--accent)';
+        startupCard.innerHTML = `<div class="item-info"><div class="item-name">${c.activeStartup.label}</div><div class="item-sub">Year ${c.activeStartup.yearsRunning} · Invested ${DATA.fmtMoney(c.activeStartup.invested)}</div><div class="item-detail text-dim">Results will come in ${Math.max(0, 2 - c.activeStartup.yearsRunning)}–${Math.max(1, 4 - c.activeStartup.yearsRunning)} years</div></div>`;
+        div.appendChild(startupCard);
+      } else {
+        Engine.STARTUP_TYPES.forEach(biz => {
+          const canAff = c.money >= biz.minInvest;
+          const card = document.createElement('div'); card.className = `item-card${canAff ? ' clickable' : ''}`;
+          card.innerHTML = `
+            <div class="item-top">
+              <div class="item-icon ic-teal" style="font-size:.6rem">Biz</div>
+              <div class="item-info">
+                <div class="item-name">${biz.label}</div>
+                <div class="item-sub">Min ${DATA.fmtMoney(biz.minInvest)} · win ${biz.multWin}× / lose ${biz.multLose}×</div>
+                <div class="item-detail text-dim">Fail rate: ${Math.round(biz.risk*100)}% · resolves in 2–4 years</div>
+              </div>
+            </div>`;
+          if (canAff) {
+            card.addEventListener('click', () => {
+              const opts = [biz.minInvest, Math.round(biz.minInvest*2), Math.min(c.money, Math.round(biz.minInvest*5))].filter((v,i,a)=>a.indexOf(v)===i&&v<=c.money);
+              const choiceDiv = document.createElement('div'); choiceDiv.style.marginTop='8px';
+              opts.forEach(amt => {
+                const b2 = document.createElement('button'); b2.className='btn btn-secondary btn-sm'; b2.style.marginRight='6px';
+                b2.textContent = `Invest ${DATA.fmtMoney(amt)}`;
+                b2.addEventListener('click', () => { const r=Engine.launchStartup(biz.id,amt); showToast(r.msg,r.ok?'good':'bad'); if(r.ok){updateDisplay();renderActivities();} });
+                choiceDiv.appendChild(b2);
+              });
+              card.appendChild(choiceDiv);
+            });
+          }
+          div.appendChild(card);
+        });
+      }
+    }
+
+    // ── Will & Estate (age 30+) ───────────────────────────────
+    if (c.age >= 30) {
+      const willHdr = document.createElement('div'); willHdr.className = 'section-title'; willHdr.textContent = 'Estate Planning'; div.appendChild(willHdr);
+      if (c.will) {
+        const willCard = document.createElement('div'); willCard.className = 'item-card';
+        willCard.style.borderColor = 'var(--green)';
+        willCard.innerHTML = `<div class="item-info"><div class="item-name">Will Written</div><div class="item-sub">${c.will.label}</div><div class="item-detail text-green">+${c.will.legacyBonus} legacy points on death</div></div>`;
+        div.appendChild(willCard);
+        const changeBtn = document.createElement('button'); changeBtn.className = 'btn btn-ghost btn-full mb-8';
+        changeBtn.textContent = 'Change Will';
+        changeBtn.addEventListener('click', () => { delete State.getChar().will; renderActivities(); });
+        div.appendChild(changeBtn);
+      } else {
+        Engine.WILL_OPTIONS.forEach(opt => {
+          const card = document.createElement('div'); card.className = 'item-card clickable';
+          card.innerHTML = `<div class="item-info"><div class="item-name">${opt.label}</div><div class="item-sub">${opt.desc}</div><div class="item-detail text-accent">+${opt.legacyBonus} legacy pts</div></div>`;
+          card.addEventListener('click', () => { const r=Engine.writeWill(opt.id); showToast(r.msg,r.ok?'good':'bad'); renderActivities(); });
+          div.appendChild(card);
+        });
+      }
     }
 
     // ── Side Hustles (age 16+) ─────────────────────────────────
@@ -886,7 +1067,13 @@ const UI = (() => {
           else { const r = Engine.addToCircle(rel.id); showToast(r.msg, r.ok?'good':'bad'); }
           renderRelationships();
         });
-        if (active) card.addEventListener('click', () => showRelActionModal(rel));
+        if (active) {
+          if ((rel.subtype === 'father' || rel.subtype === 'mother') && rel.age >= 70) {
+            card.addEventListener('click', () => showParentCareModal(rel));
+          } else {
+            card.addEventListener('click', () => showRelActionModal(rel));
+          }
+        }
         div.appendChild(card);
       });
     }
@@ -920,12 +1107,48 @@ const UI = (() => {
       if (rel.subtype !== 'spouse') {
         actions.push({ id:'propose', label:'Propose', sub:'Need 60+ relationship, age 18+ · free', energy:false, disabled: rel.relationship < 60 || c.age < 18 });
       }
+      actions.push({ id:'_cheat', label:'Have an Affair', sub:'35% chance of getting caught · 1 energy', energy:true, isCheat:true });
       if (rel.subtype === 'spouse') {
         actions.push({ id:'plan_wedding', label:'Plan the Wedding', sub:'Choose a venue and celebrate · free', energy:false, isWedding:true });
         if (c.age >= 18 && c.age <= 50) {
           actions.push({ id:'plan_child_btn', label:'Try for a Child', sub:'Choose name and gender · 1 energy', energy:true, isPlanChild:true });
         }
       }
+    }
+
+    // Child interactions — replace standard actions for children
+    if (rel.subtype === 'child' && rel.status === 'active') {
+      const childAge = rel.age || 0;
+      const childActions = [
+        { id:'play',           label:'Play Together',        sub:'+Bond, +Happiness · 1 energy' },
+        { id:'park',           label:'Trip to the Park',     sub:'-$20, +Bond, +Health · 1 energy' },
+        { id:'family_game_night', label:'Family Game Night', sub:'-$30, +Bond, +Happiness · 1 energy' },
+        { id:'teach_skill',    label:'Teach Them Something', sub:'+Bond · 1 energy' },
+        ...(childAge >= 6  ? [{ id:'homework', label:'Help with Homework', sub:'+Bond, +Happiness · 1 energy' }] : []),
+        ...(childAge <= 10 ? [{ id:'bedtime_story', label:'Bedtime Story', sub:'+Bond, big happiness · 1 energy' }] : []),
+        ...(childAge >= 13 ? [{ id:'heart_to_heart', label:'Heart-to-Heart Talk', sub:'+Bond, +Mental Health · 1 energy' }] : []),
+        ...(childAge >= 13 ? [{ id:'ground', label:'Ground Them', sub:'-Bond, discipline · 1 energy' }] : []),
+        { id:'spend_time',    label:'Spend Time Together',  sub:'+Bond, +Happiness · 1 energy' },
+        { id:'gift',          label:'Give a Gift',          sub:'-$100, big bond boost · 1 energy' },
+      ];
+      childActions.forEach(act => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-secondary btn-full mb-8';
+        btn.disabled = !hasE;
+        btn.innerHTML = `${act.label}<br><small class="text-dim">${act.sub}</small>`;
+        btn.addEventListener('click', () => {
+          const r = Engine.childAction(rel.id, act.id);
+          if (!r.ok) { showToast(r.msg, 'bad'); return; }
+          showToast(r.msg, 'good'); closeModal('relaction'); updateDisplay();
+        });
+        div.appendChild(btn);
+      });
+      if (rel.traits?.length) {
+        const tl = document.createElement('p'); tl.className = 'text-dim'; tl.style.marginTop = '8px';
+        tl.textContent = `Traits: ${rel.traits.join(', ')}`;
+        div.appendChild(tl);
+      }
+      openModal('relaction'); return;
     }
 
     actions.forEach(act => {
@@ -951,6 +1174,12 @@ const UI = (() => {
           closeModal('relaction');
           showPlanChildModal();
         });
+      } else if (act.isCheat) {
+        btn.addEventListener('click', () => {
+          const r = Engine.cheatOnPartner();
+          showToast(r.msg, r.caught ? 'bad' : 'good');
+          closeModal('relaction'); updateDisplay(); renderRelationships();
+        });
       } else {
         btn.addEventListener('click', () => {
           const r = Engine.relationshipAction(rel.id, act.id);
@@ -967,6 +1196,31 @@ const UI = (() => {
       tl.textContent = `Traits: ${rel.traits.join(', ')}`;
       div.appendChild(tl);
     }
+    openModal('relaction');
+  }
+
+  function showParentCareModal(rel) {
+    const c = State.getChar();
+    qs('#relaction-title').textContent = rel.name;
+    const div = qs('#relaction-content'); div.innerHTML = '';
+    const cost = rel.age >= 85 ? 12000 : 6000;
+    const infoCard = document.createElement('div'); infoCard.className = 'item-card';
+    infoCard.innerHTML = `<div class="item-info"><div class="item-name">${rel.name}, age ${rel.age}</div><div class="item-sub">${rel.caredFor ? 'Currently receiving care' : 'Elderly — may need support'}</div><div class="item-detail text-dim">Care costs ${DATA.fmtMoney(cost)}/year · improves bond</div></div>`;
+    div.appendChild(infoCard);
+    const careBtn = document.createElement('button'); careBtn.className = 'btn btn-primary btn-full mb-8';
+    careBtn.textContent = `Arrange Care — ${DATA.fmtMoney(cost)}`;
+    careBtn.disabled = c.money < cost;
+    careBtn.addEventListener('click', () => { const r=Engine.careForParent(rel.id); showToast(r.msg,r.ok?'good':'bad'); closeModal('relaction'); updateDisplay(); renderRelationships(); });
+    div.appendChild(careBtn);
+    const visitBtn = document.createElement('button'); visitBtn.className = 'btn btn-secondary btn-full mb-8';
+    visitBtn.textContent = 'Visit & Spend Time (free)';
+    visitBtn.addEventListener('click', () => { const r=Engine.relationshipAction(rel.id,'spend_time'); showToast(r.msg,r.ok?'good':'bad'); closeModal('relaction'); updateDisplay(); renderRelationships(); });
+    div.appendChild(visitBtn);
+    const giftBtn = document.createElement('button'); giftBtn.className = 'btn btn-secondary btn-full mb-8';
+    giftBtn.textContent = 'Give a Gift (-$100)';
+    giftBtn.disabled = c.money < 100;
+    giftBtn.addEventListener('click', () => { const r=Engine.relationshipAction(rel.id,'gift'); showToast(r.msg,r.ok?'good':'bad'); closeModal('relaction'); updateDisplay(); renderRelationships(); });
+    div.appendChild(giftBtn);
     openModal('relaction');
   }
 
@@ -1172,6 +1426,13 @@ const UI = (() => {
         studyActions.push({ label:'Cram All Night',   sub:`+10–18 Smarts, -Health & Happiness · 1 energy`, fn: () => Engine.cramAllNight(),      energy:true });
         studyActions.push({ label:'Seduce the Professor', sub:`Very risky. Could backfire badly · 1 energy`, fn: () => Engine.seduceProfessor(), energy:true });
         studyActions.push({ label:'Cheat on Exam',    sub:`Risky! Could get expelled · free`,    fn: () => Engine.cheatOnExam(),        energy:false });
+      }
+      // College social life
+      if (edu.inSchool && edu.schoolType === 'university') {
+        studyActions.push({ label: c.joinedFrat ? 'Frat/Sorority (joined)' : 'Join Frat / Sorority', sub:'Meet people, +Happiness · 1 energy', fn: () => Engine.collegeAction('frat'), energy:true, disabled:!!c.joinedFrat });
+        studyActions.push({ label:'Pull an All-Nighter', sub:'+GPA, -Health · 1 energy', fn: () => Engine.collegeAction('all_nighter'), energy:true });
+        studyActions.push({ label:'College Party',    sub:'+Happiness, chance to meet someone · 1 energy', fn: () => Engine.collegeAction('college_party'), energy:true });
+        studyActions.push({ label:'Study Group',      sub:'+GPA, chance to make a friend · 1 energy',     fn: () => Engine.collegeAction('study_group'),   energy:true });
       }
 
       studyActions.forEach(act => {
