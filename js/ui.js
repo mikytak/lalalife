@@ -651,35 +651,9 @@ const UI = (() => {
       hCard.innerHTML = `<div class="horoscope-sign">✨ ${h.sign}</div><div>${h.line}</div>`;
       div.appendChild(hCard); }
 
-    // ── Health Care (age 5+) ──────────────────────────────────
-    if (c.age >= 5) {
-      const hcHdr = document.createElement('div'); hcHdr.className = 'section-title'; hcHdr.textContent = 'Health Care'; div.appendChild(hcHdr);
-      const hasHealthIns = c.insurance?.health;
-      const hcActions = [
-        { id:'doctor',   label:'Doctor Visit',       sub:`${hasHealthIns?'$50 (insured)':'$200'} · +8 health` },
-        { id:'dentist',  label:'Dentist',            sub:`${hasHealthIns?'$40 (insured)':'$300'} · +looks, +mood` },
-        { id:'optometrist', label:'Optometrist',     sub:`${hasHealthIns?'$30 (insured)':'$150'} · +smarts` },
-        { id:'trainer',  label: c.personalTrainer ? 'Cancel Trainer ($2k/yr active)' : 'Personal Trainer', sub:'$2,000/yr · +5 health/year', action: c.personalTrainer ? 'cancel_trainer' : 'trainer' },
-      ];
-      hcActions.forEach(act => {
-        const card = document.createElement('div'); card.className = 'item-card clickable';
-        card.innerHTML = `<div class="item-top"><div class="item-icon" style="background:var(--health);color:#fff;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700">+HP</div><div class="item-info"><div class="item-name">${act.label}</div><div class="item-sub">${act.sub}</div></div></div>`;
-        card.addEventListener('click', () => { const r=Engine.healthCare(act.action||act.id); showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
-        div.appendChild(card);
-      });
-      // Tattoo removal
-      if ((c.tattoos||0) > 0) {
-        const tatCard = document.createElement('div'); tatCard.className = 'item-card clickable';
-        tatCard.innerHTML = `<div class="item-top"><div class="item-icon ic-rose" style="font-size:.6rem">Tat</div><div class="item-info"><div class="item-name">Remove a Tattoo</div><div class="item-sub">$800 · you have ${c.tattoos} tattoo(s)</div></div></div>`;
-        tatCard.addEventListener('click', () => { const r=Engine.removeTattoo(); showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
-        div.appendChild(tatCard);
-      }
-    }
-
     // ── Subscriptions ────────────────────────────────────────
     { const subHdr2 = document.createElement('div'); subHdr2.className = 'section-title'; subHdr2.textContent = 'Subscriptions'; div.appendChild(subHdr2);
       c.subscriptions = c.subscriptions || {};
-      const activeSubs = Engine.SUBSCRIPTIONS.filter(s => s.id !== 'gym_sub' ? c.subscriptions[s.id] : c.gymMembership);
       const totalSubCost = Engine.SUBSCRIPTIONS.reduce((sum, s) => {
         const on = s.id === 'gym_sub' ? c.gymMembership : c.subscriptions[s.id];
         return sum + (on ? s.cost : 0);
@@ -705,6 +679,31 @@ const UI = (() => {
         });
         div.appendChild(card);
       }); }
+
+    // ── Health Care (age 5+) ──────────────────────────────────
+    if (c.age >= 5) {
+      const hcHdr = document.createElement('div'); hcHdr.className = 'section-title'; hcHdr.textContent = 'Health Care'; div.appendChild(hcHdr);
+      const hasHealthIns = c.insurance?.health;
+      const hcActions = [
+        { id:'doctor',   label:'Doctor Visit',       sub:`${hasHealthIns?'$50 (insured)':'$200'} · +8 health` },
+        { id:'dentist',  label:'Dentist',            sub:`${hasHealthIns?'$40 (insured)':'$300'} · +looks, +mood` },
+        { id:'optometrist', label:'Optometrist',     sub:`${hasHealthIns?'$30 (insured)':'$150'} · +smarts` },
+        { id:'trainer',  label: c.personalTrainer ? 'Cancel Trainer ($2k/yr active)' : 'Personal Trainer', sub:'$2,000/yr · +5 health/year', action: c.personalTrainer ? 'cancel_trainer' : 'trainer' },
+      ];
+      hcActions.forEach(act => {
+        const card = document.createElement('div'); card.className = 'item-card clickable';
+        card.innerHTML = `<div class="item-top"><div class="item-icon" style="background:var(--health);color:#fff;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700">+HP</div><div class="item-info"><div class="item-name">${act.label}</div><div class="item-sub">${act.sub}</div></div></div>`;
+        card.addEventListener('click', () => { const r=Engine.healthCare(act.action||act.id); showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
+        div.appendChild(card);
+      });
+      // Tattoo removal
+      if ((c.tattoos||0) > 0) {
+        const tatCard = document.createElement('div'); tatCard.className = 'item-card clickable';
+        tatCard.innerHTML = `<div class="item-top"><div class="item-icon ic-rose" style="font-size:.6rem">Tat</div><div class="item-info"><div class="item-name">Remove a Tattoo</div><div class="item-sub">$800 · you have ${c.tattoos} tattoo(s)</div></div></div>`;
+        tatCard.addEventListener('click', () => { const r=Engine.removeTattoo(); showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
+        div.appendChild(tatCard);
+      }
+    }
 
     // ── Military (age 18–30) ──────────────────────────────────
     if (c.age >= 18 && c.age <= 30 && !c.militaryVeteran) {
@@ -1081,6 +1080,22 @@ const UI = (() => {
     // Meet someone / socialize actions at top
     const actHdr = document.createElement('div'); actHdr.className = 'section-title'; actHdr.textContent = 'Connect'; div.appendChild(actHdr);
 
+    // Family group hangout — always visible when family alive
+    { const fam = g.relationships.filter(r => r.type==='family' && r.status==='active');
+      if (fam.length >= 1) {
+        const famBtn = document.createElement('button');
+        famBtn.className = 'btn btn-secondary btn-full mb-8';
+        famBtn.innerHTML = `👨‍👩‍👧 Family Hangout (${fam.length})<br><small class="text-dim">Boost all family bonds · 1 energy</small>`;
+        famBtn.disabled = !Engine.hasEnergy();
+        famBtn.addEventListener('click', () => {
+          const r = Engine.familyHangout();
+          showToast(r.msg, r.ok ? 'good' : 'bad');
+          if (r.ok) { updateDisplay(); renderRelationships(); }
+        });
+        div.appendChild(famBtn);
+      }
+    }
+
     // Make a school friend (age 6–18)
     if (c.age >= 6 && c.age <= 18) {
       const scBtn = document.createElement('button');
@@ -1161,21 +1176,6 @@ const UI = (() => {
       empty.innerHTML = '<div class="empty-icon">?</div>No relationships yet.';
       div.appendChild(empty); return;
     }
-    // Family group hangout button
-    const familyMembers = g.relationships.filter(r => r.type==='family' && r.status==='active');
-    if (familyMembers.length >= 1) {
-      const famHangBtn = document.createElement('button');
-      famHangBtn.className = 'btn btn-secondary btn-full mb-8';
-      famHangBtn.innerHTML = `Family Hangout (${familyMembers.length})<br><small class="text-dim">Boost all family bonds · 1 energy</small>`;
-      famHangBtn.disabled = !Engine.hasEnergy();
-      famHangBtn.addEventListener('click', () => {
-        const r = Engine.familyHangout();
-        showToast(r.msg, r.ok ? 'good' : 'bad');
-        if (r.ok) { updateDisplay(); renderRelationships(); }
-      });
-      div.appendChild(famHangBtn);
-    }
-
     const groups = { partner:'Romantic', family:'Family', friend:'Friends', ex:'Former Partners & Exes', enemy:'Enemies' };
     for (const [type, label] of Object.entries(groups)) {
       const rels = g.relationships.filter(r => r.type === type);
