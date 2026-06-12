@@ -120,6 +120,15 @@ const Game = (() => {
     document.getElementById('btn-age-up').addEventListener('click', async () => {
       const g = State.get(); if (!g || !g.isAlive) return;
       const btn = document.getElementById('btn-age-up'); btn.disabled = true;
+      // Birthday flash
+      const flash = document.getElementById('birthday-flash');
+      if (flash) {
+        const age = g.character.age + 1;
+        flash.textContent = `🎂 Age ${age}`;
+        flash.style.display = 'flex';
+        flash.classList.add('bday-flash-active');
+        setTimeout(() => { flash.style.display = 'none'; flash.classList.remove('bday-flash-active'); }, 1400);
+      }
       try { await Engine.ageUp(); } catch(e) { console.error(e); UI.showToast('Something went wrong.', 'bad'); }
       finally { if (State.get()?.isAlive) btn.disabled = false; }
     });

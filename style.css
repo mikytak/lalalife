@@ -1059,3 +1059,53 @@ html, body {
   .modal { border-radius: var(--radius); max-height: 80dvh; }
   .modal-tall { max-height: 86dvh; }
 }
+
+/* ─── Nav badges ─────────────────────────────────────────────── */
+.btn-nav { position: relative; }
+.nav-badge {
+  position: absolute; top: 2px; right: 2px;
+  min-width: 16px; height: 16px; border-radius: 8px;
+  background: var(--red); color: #fff;
+  font-size: .55rem; font-weight: 800; line-height: 16px;
+  padding: 0 3px; text-align: center;
+  box-shadow: 0 1px 4px #0005;
+  pointer-events: none;
+}
+
+/* ─── Death ribbon ────────────────────────────────────────────── */
+.death-ribbon {
+  margin: 8px auto 12px;
+  background: linear-gradient(135deg, var(--accent), var(--blue));
+  color: #fff; border-radius: 20px;
+  padding: 6px 18px; display: inline-block;
+  font-size: .82rem; font-weight: 800; letter-spacing: .04em;
+  text-align: center;
+}
+
+/* ─── Birthday flash ─────────────────────────────────────────── */
+@keyframes bdayPop {
+  0%   { opacity:0; transform:scale(.7); }
+  30%  { opacity:1; transform:scale(1.05); }
+  80%  { opacity:1; transform:scale(1); }
+  100% { opacity:0; transform:scale(.95); }
+}
+.bday-flash-active {
+  animation: bdayPop 1.4s ease forwards;
+  background: radial-gradient(circle, #f9a82580 0%, transparent 70%);
+}
+
+/* ─── Enemy badge ─────────────────────────────────────────────── */
+.badge-enemy {
+  background: var(--red); color: #fff; font-size: .6rem;
+  padding: 1px 6px; border-radius: 8px; font-weight: 700; margin-left: 4px;
+}
+
+/* ─── Horoscope card ─────────────────────────────────────────── */
+.horoscope-card {
+  background: linear-gradient(135deg, #1a1040, #2d1b69);
+  border: 1px solid #6c4fd4;
+  border-radius: var(--radius); padding: 12px;
+  color: #e8d5ff; margin-bottom: 8px;
+  font-size: .83rem; line-height: 1.6;
+}
+.horoscope-sign { font-size: 1rem; font-weight: 800; color: #c9a0ff; margin-bottom: 4px; }

@@ -46,6 +46,28 @@ const UI = (() => {
     qs('#ageup-next').textContent = c.age + 1;
     qs('#btn-age-up').disabled = false;
 
+    // ── Notification badges ──────────────────────────────────
+    const setBadge = (id, val) => { const el=qs(id); if(!el) return; if(val){ el.textContent=val>9?'!':val; el.style.display=''; } else el.style.display='none'; };
+    // Activities: addiction active, jail, low mental health
+    let actBadge = 0;
+    if ((c.addictions||[]).length) actBadge++;
+    if (c.inJail) actBadge++;
+    if ((c.mentalHealth||80) < 30) actBadge++;
+    if (c.activeStartup) actBadge++;
+    setBadge('#badge-activities', actBadge);
+    // Relationships: partner bond low, ex reached out, enemy
+    const g2 = State.get();
+    let relBadge = 0;
+    const partnerRel = g2.relationships.find(r=>r.type==='partner'&&r.status==='active');
+    if (partnerRel && partnerRel.relationship < 30) relBadge++;
+    if (g2.relationships.some(r=>r.reachedOut)) relBadge++;
+    if (g2.relationships.some(r=>r.type==='enemy'&&r.status==='active')) relBadge++;
+    setBadge('#badge-relationships', relBadge);
+    // Career: no job (age 18+), startup resolved
+    setBadge('#badge-career', c.age>=18 && !c.career.jobId && !c.career.retired && !c.inMilitary ? 1 : 0);
+    // Assets: loan outstanding, low money
+    setBadge('#badge-assets', (c.personalLoan>0 || c.money<500) ? 1 : 0);
+
     // Life goal indicator
     const goalEl = qs('#hdr-lifegoal');
     if (goalEl) {
@@ -623,6 +645,94 @@ const UI = (() => {
       }
     }
 
+    // ── Horoscope ─────────────────────────────────────────────
+    { const h = Engine.getHoroscope(c);
+      const hCard = document.createElement('div'); hCard.className = 'horoscope-card';
+      hCard.innerHTML = `<div class="horoscope-sign">✨ ${h.sign}</div><div>${h.line}</div>`;
+      div.appendChild(hCard); }
+
+    // ── Health Care (age 5+) ──────────────────────────────────
+    if (c.age >= 5) {
+      const hcHdr = document.createElement('div'); hcHdr.className = 'section-title'; hcHdr.textContent = 'Health Care'; div.appendChild(hcHdr);
+      const hasHealthIns = c.insurance?.health;
+      const hcActions = [
+        { id:'doctor',   label:'Doctor Visit',       sub:`${hasHealthIns?'$50 (insured)':'$200'} · +8 health` },
+        { id:'dentist',  label:'Dentist',            sub:`${hasHealthIns?'$40 (insured)':'$300'} · +looks, +mood` },
+        { id:'optometrist', label:'Optometrist',     sub:`${hasHealthIns?'$30 (insured)':'$150'} · +smarts` },
+        { id:'gym',      label: c.gymMembership ? 'Cancel Gym ($600/yr active)' : 'Join Gym',   sub:'$600/yr · +2 health/year', action: c.gymMembership ? 'cancel_gym' : 'gym' },
+        { id:'trainer',  label: c.personalTrainer ? 'Cancel Trainer ($2k/yr active)' : 'Personal Trainer', sub:'$2,000/yr · +5 health/year', action: c.personalTrainer ? 'cancel_trainer' : 'trainer' },
+      ];
+      hcActions.forEach(act => {
+        const card = document.createElement('div'); card.className = 'item-card clickable';
+        card.innerHTML = `<div class="item-top"><div class="item-icon" style="background:var(--health);color:#fff;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700">+HP</div><div class="item-info"><div class="item-name">${act.label}</div><div class="item-sub">${act.sub}</div></div></div>`;
+        card.addEventListener('click', () => { const r=Engine.healthCare(act.action||act.id); showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
+        div.appendChild(card);
+      });
+      // Tattoo removal
+      if ((c.tattoos||0) > 0) {
+        const tatCard = document.createElement('div'); tatCard.className = 'item-card clickable';
+        tatCard.innerHTML = `<div class="item-top"><div class="item-icon ic-rose" style="font-size:.6rem">Tat</div><div class="item-info"><div class="item-name">Remove a Tattoo</div><div class="item-sub">$800 · you have ${c.tattoos} tattoo(s)</div></div></div>`;
+        tatCard.addEventListener('click', () => { const r=Engine.removeTattoo(); showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
+        div.appendChild(tatCard);
+      }
+    }
+
+    // ── Military (age 18–30) ──────────────────────────────────
+    if (c.age >= 18 && c.age <= 30 && !c.militaryVeteran) {
+      const milHdr = document.createElement('div'); milHdr.className = 'section-title'; milHdr.textContent = 'Military'; div.appendChild(milHdr);
+      if (c.inMilitary) {
+        const milCard = document.createElement('div'); milCard.className = 'item-card';
+        milCard.style.borderColor = 'var(--green)';
+        milCard.innerHTML = `<div class="item-info"><div class="item-name" style="color:var(--green)">Currently Serving</div><div class="item-sub">${c.militaryYearsLeft} year(s) remaining · $32,000/yr</div><div class="item-detail text-dim">GI Bill ($30k education benefit) on discharge</div></div>`;
+        div.appendChild(milCard);
+      } else {
+        const enlBtn = document.createElement('div'); enlBtn.className = 'item-card clickable';
+        enlBtn.innerHTML = `<div class="item-top"><div class="item-icon" style="background:#4a6fa5;color:#fff;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700">Mil</div><div class="item-info"><div class="item-name">Enlist in Military</div><div class="item-sub">4 years · $32k/yr · +health · GI Bill on exit</div><div class="item-detail text-dim">Risk of deployment and PTSD</div></div></div>`;
+        enlBtn.addEventListener('click', () => { const r=Engine.enlistMilitary(); showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
+        div.appendChild(enlBtn);
+      }
+    }
+    // Veteran badge
+    if (c.militaryVeteran) {
+      const vetCard = document.createElement('div'); vetCard.className = 'item-card';
+      vetCard.style.borderColor = '#4a6fa5';
+      vetCard.innerHTML = `<div class="item-info"><div class="item-name" style="color:#6a9fd8">🎖 Military Veteran</div><div class="item-sub">${c.giBill > 0 ? `GI Bill: ${DATA.fmtMoney(c.giBill)} available` : 'GI Bill used'}</div></div>`;
+      div.appendChild(vetCard);
+    }
+
+    // ── Memoir (age 60+) ─────────────────────────────────────
+    if (c.age >= 60) {
+      const memHdr = document.createElement('div'); memHdr.className = 'section-title'; memHdr.textContent = 'Legacy'; div.appendChild(memHdr);
+      const memCard = document.createElement('div'); memCard.className = c.wroteMemoir ? 'item-card' : 'item-card clickable';
+      const advance = Math.round(10000 + (c.age-60)*500 + (c.fame||0)*300);
+      memCard.innerHTML = `<div class="item-top"><div class="item-icon" style="background:var(--accent);color:#fff;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700">📖</div><div class="item-info"><div class="item-name">${c.wroteMemoir ? 'Memoir Published ✓' : 'Write Your Memoir'}</div><div class="item-sub">${c.wroteMemoir ? 'Your story lives on.' : `Earn ~${DATA.fmtMoney(advance)} · 1 energy · once`}</div></div></div>`;
+      if (!c.wroteMemoir) memCard.addEventListener('click', () => { const r=Engine.writeMemoirAction(); showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
+      div.appendChild(memCard);
+    }
+
+    // ── Prison activities (overrides when in jail) ────────────
+    if (c.inJail) {
+      const prisonHdr = document.createElement('div'); prisonHdr.className = 'section-title'; prisonHdr.textContent = `In Jail — ${c.jailYearsLeft} yr(s) left`; prisonHdr.style.color='var(--red)'; div.appendChild(prisonHdr);
+      [
+        { id:'workout',     label:'Work Out in the Yard', sub:'+8 health · 1 energy' },
+        { id:'read',        label:'Read in the Library',  sub:'+5 smarts, +mood · 1 energy' },
+        { id:'meditate',    label:'Meditate',             sub:'+mental health · 1 energy' },
+        { id:'make_friend', label:'Make a Friend Inside', sub:'+happiness · 1 energy' },
+        { id:'fight',       label:'Pick a Fight',         sub:'Risky — could add time to sentence · 1 energy' },
+      ].forEach(act => {
+        const card = document.createElement('div'); card.className = 'item-card clickable';
+        card.innerHTML = `<div class="item-info"><div class="item-name">${act.label}</div><div class="item-sub">${act.sub}</div></div>`;
+        card.addEventListener('click', () => { const r=Engine.doPrisonActivity(act.id); showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
+        div.appendChild(card);
+      });
+      if (c.money >= (c.jailBail||0)) {
+        const bailCard = document.createElement('div'); bailCard.className = 'item-card clickable'; bailCard.style.borderColor='var(--green)';
+        bailCard.innerHTML = `<div class="item-info"><div class="item-name" style="color:var(--green)">Pay Bail — ${DATA.fmtMoney(c.jailBail)}</div><div class="item-sub">Get out now</div></div>`;
+        bailCard.addEventListener('click', () => { const r=Engine.payBail(); showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
+        div.appendChild(bailCard);
+      }
+    }
+
     // ── Side Hustles (age 16+) ─────────────────────────────────
     if (c.age >= 16) {
       const shHdr = document.createElement('div'); shHdr.className = 'section-title'; shHdr.textContent = 'Side Hustles'; div.appendChild(shHdr);
@@ -1052,7 +1162,7 @@ const UI = (() => {
           <div class="item-top">
             <div class="item-icon ic-rose">${icon}</div>
             <div class="item-info">
-              <div class="item-name">${rel.name} <span class="text-dim">(${rel.age})</span>${inCircle?'<span class="badge badge-accent" style="margin-left:4px">Circle</span>':''}</div>
+              <div class="item-name">${rel.name} <span class="text-dim">(${rel.age})</span>${inCircle?'<span class="badge badge-accent" style="margin-left:4px">Circle</span>':''}${rel.isBestFriend?'<span class="badge badge-accent" style="margin-left:4px;background:gold;color:#000">⭐ BFF</span>':''}${rel.type==='enemy'?'<span class="badge-enemy">Enemy</span>':''}${rel.reachedOut?'<span class="badge badge-accent" style="margin-left:4px;background:var(--pink)">👋 Reached Out</span>':''}</div>
               <div class="item-sub">${ucFirst(rel.subtype)}${!active ? ' · ' + rel.status : ''}</div>
               ${loveLabel ? `<div style="font-size:.72rem;font-weight:700;color:${loveLabel.color};margin-top:2px">${loveLabel.text}</div>` : ''}
             </div>
@@ -1095,6 +1205,14 @@ const UI = (() => {
 
     if (rel.type === 'friend' && c.age >= 12 && c.sexuality !== 'asexual') {
       actions.push({ id:'ask_out', label:'Ask Them Out', sub:`${rel.relationship >= 60 ? 'Good chance!' : 'Low chance...'} · 1 energy`, energy:true, askOut:true });
+    }
+    if (rel.type === 'friend' && rel.status === 'active') {
+      actions.push({ id:'_bestfriend', label: rel.isBestFriend ? '⭐ Best Friend (active)' : 'Make Best Friend', sub:'Need 60+ bond · permanent badge', energy:false, isBestFriend:true, disabled: rel.relationship < 60 || !!rel.isBestFriend });
+      actions.push({ id:'_ghost', label:'Ghost Them', sub:'Slowly drop contact — no energy cost', energy:false, isGhost:true });
+    }
+    if (rel.type === 'ex' && rel.reachedOut) {
+      actions.push({ id:'_rekindle', label:'Rekindle with ' + rel.name, sub:'Give the relationship another shot', energy:false, isRekindle:true });
+      actions.push({ id:'_reject_ex', label:'Reject & Move On', sub:'Close this chapter for good', energy:false, isRejectEx:true });
     }
 
     if (rel.type === 'partner') {
@@ -1178,6 +1296,35 @@ const UI = (() => {
         btn.addEventListener('click', () => {
           const r = Engine.cheatOnPartner();
           showToast(r.msg, r.caught ? 'bad' : 'good');
+          closeModal('relaction'); updateDisplay(); renderRelationships();
+        });
+      } else if (act.isBestFriend) {
+        btn.addEventListener('click', () => {
+          const r = Engine.setBestFriend(rel.id);
+          showToast(r.msg, r.ok ? 'good' : 'bad');
+          closeModal('relaction'); updateDisplay(); renderRelationships();
+        });
+      } else if (act.isGhost) {
+        btn.addEventListener('click', () => {
+          if (!confirm(`Ghost ${rel.name}? They will get the message.`)) return;
+          const r = Engine.ghostPerson(rel.id);
+          showToast(r.msg, 'info');
+          closeModal('relaction'); updateDisplay(); renderRelationships();
+        });
+      } else if (act.isRekindle) {
+        btn.addEventListener('click', () => {
+          const g3 = State.get();
+          const ex = g3.relationships.find(r3 => r3.id === rel.id);
+          if (ex) { ex.type='partner'; ex.subtype='partner'; ex.status='active'; ex.reachedOut=false; ex.relationship=Math.min(100,ex.relationship+20); State.saveGame(); }
+          showToast(`Back together with ${rel.name}!`, 'good');
+          closeModal('relaction'); updateDisplay(); renderRelationships();
+        });
+      } else if (act.isRejectEx) {
+        btn.addEventListener('click', () => {
+          const g3 = State.get();
+          const ex = g3.relationships.find(r3 => r3.id === rel.id);
+          if (ex) { ex.reachedOut=false; State.saveGame(); }
+          showToast(`You moved on from ${rel.name}.`, 'info');
           closeModal('relaction'); updateDisplay(); renderRelationships();
         });
       } else {
@@ -1620,22 +1767,64 @@ const UI = (() => {
     `;
     div.appendChild(sumCard);
 
+        // ── Taxes ──────────────────────────────────────────────────
+    if (c.career.jobId && !c.career.retired) {
+      mkSection(div, 'Taxes');
+      const taxInfo = Engine.getTaxInfo(c);
+      const taxCard = document.createElement('div'); taxCard.className = 'item-card';
+      taxCard.innerHTML = `<div class="flex-between mb-8"><span class="fw-700">Income Tax</span><span class="text-red">${Math.round(taxInfo.rate*100)}% bracket</span></div><div class="text-dim">Paying ~${DATA.fmtMoney(taxInfo.annual)}/yr · Paid this life: ${DATA.fmtMoney(taxInfo.paid)}</div>`;
+      div.appendChild(taxCard);
+    }
+
+    // ── Bank Loan ──────────────────────────────────────────────
+    mkSection(div, 'Personal Loan');
+    if (c.personalLoan > 0) {
+      const loanCard = document.createElement('div'); loanCard.className = 'item-card';
+      loanCard.innerHTML = `<div class="flex-between mb-8"><span class="fw-700">Outstanding Loan</span><span class="text-red">-${DATA.fmtMoney(c.personalLoan)}</span></div><div class="text-dim">9% interest/yr · ~${DATA.fmtMoney(Math.round(c.personalLoan*0.15+500))} paid/yr automatically</div>`;
+      div.appendChild(loanCard);
+    } else {
+      const maxLoan = Math.max(5000, (c.career.salary||0) * 3);
+      [Math.round(maxLoan*0.25), Math.round(maxLoan*0.5), maxLoan].filter(v=>v>=1000).forEach(amt => {
+        const canAff = true;
+        const row = document.createElement('div'); row.className = 'buy-item';
+        row.innerHTML = `<div><div class="buy-item-name">Borrow ${DATA.fmtMoney(amt)}</div><div class="buy-item-sub">9% interest · repaid automatically</div></div><button class="btn btn-secondary btn-xs">Take Loan</button>`;
+        row.querySelector('button').addEventListener('click', () => { const r=Engine.takeLoan(amt); showToast(r.msg,r.ok?'good':'bad'); if(r.ok){updateDisplay();renderAssets();} });
+        div.appendChild(row);
+      });
+    }
+
+    // ── Insurance ─────────────────────────────────────────────
+    mkSection(div, 'Insurance');
+    [{ id:'health',label:'Health Insurance',cost:500,desc:'Doctor/dentist visits discounted'}, {id:'home',label:'Home Insurance',cost:400,desc:'Protects property equity'}, {id:'car',label:'Car Insurance',cost:300,desc:'Protects vehicle value'}].forEach(ins => {
+      const active = c.insurance?.[ins.id];
+      const card = document.createElement('div'); card.className = 'item-card clickable';
+      card.innerHTML = `<div class="flex-between"><span class="fw-700">${ins.label}</span><span class="${active?'text-green':'text-dim'}">${active?'Active':'Inactive'}</span></div><div class="text-dim">${DATA.fmtMoney(ins.cost)}/yr · ${ins.desc}</div>`;
+      card.addEventListener('click', () => { const r=Engine.manageInsurance(ins.id,!active); showToast(r.msg,r.ok?'good':'info'); updateDisplay(); renderAssets(); });
+      div.appendChild(card);
+    });
+
     // Houses
     mkSection(div, 'Properties');
     if (!c.assets.houses.length) div.appendChild(makeEmpty('Ho', 'No properties owned.'));
     else c.assets.houses.forEach((h,idx) => {
       const card = document.createElement('div'); card.className = 'item-card';
+      const rentAmt = Math.round(h.value * 0.06);
       card.innerHTML = `
         <div class="item-top">
           <div class="item-icon ic-teal">Ho</div>
           <div class="item-info">
-            <div class="item-name">${h.name}</div>
+            <div class="item-name">${h.name}${h.isRental?' <span class="badge badge-accent">Rental</span>':''}</div>
             <div class="item-sub text-green">${DATA.fmtMoney(h.value)}</div>
             ${h.mortgage>0?`<div class="item-detail text-red">Mortgage: -${DATA.fmtMoney(h.mortgage)}</div>`:'<div class="item-detail text-green">Fully owned</div>'}
+            ${h.isRental?`<div class="item-detail text-green">Earns ~${DATA.fmtMoney(rentAmt)}/yr in rent</div>`:''}
           </div>
         </div>
-        <div class="item-actions"><button class="btn btn-danger btn-sm" data-sell-house="${idx}">Sell</button></div>`;
+        <div class="item-actions">
+          <button class="btn btn-secondary btn-sm" data-rental-house="${idx}">${h.isRental?'Stop Renting':'Rent Out'}</button>
+          <button class="btn btn-danger btn-sm" data-sell-house="${idx}">Sell</button>
+        </div>`;
       card.querySelector(`[data-sell-house]`).addEventListener('click', () => { if(confirm('Sell property?')){Engine.sellHouse(idx);showToast('Property sold.','good');updateDisplay();renderAssets();} });
+      card.querySelector(`[data-rental-house]`).addEventListener('click', () => { const r=Engine.toggleRental(idx); showToast(r.msg,'good'); updateDisplay(); renderAssets(); });
       div.appendChild(card);
     });
 
@@ -1895,6 +2084,11 @@ const UI = (() => {
     qs('#death-name').textContent  = s.name;
     qs('#death-years').textContent = `${s.birthYear} – ${s.birthYear+s.age} · Aged ${s.age} · ${s.country}`;
     qs('#death-cause').textContent = `Cause of death: ${s.cause}`;
+    const ribbonEl = qs('#death-ribbon');
+    if (ribbonEl && s.ribbon) {
+      ribbonEl.innerHTML = `🎗 ${s.ribbon.ribbon} <span style="font-weight:400;font-size:.75rem;opacity:.85">— ${s.ribbon.desc}</span>`;
+      ribbonEl.style.display = 'block';
+    } else if (ribbonEl) ribbonEl.style.display = 'none';
     qs('#death-stats').innerHTML = [
       { label:'Net Worth',       value:DATA.fmtMoney(s.netWorth) },
       { label:'Final Health',    value:s.finalStats.health+'%' },

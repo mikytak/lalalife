@@ -160,11 +160,11 @@
       <span class="ageup-label">Age Up</span>
       <span id="ageup-next" class="ageup-next">1</span>
     </button>
-    <button class="btn btn-nav" data-modal="activities">Do<br><small>Activities</small></button>
-    <button class="btn btn-nav" data-modal="relationships">People<br><small>Relations</small></button>
-    <button class="btn btn-nav" data-modal="career">Work<br><small>Career</small></button>
-    <button class="btn btn-nav" data-modal="education">Learn<br><small>Education</small></button>
-    <button class="btn btn-nav" data-modal="assets">Assets<br><small>Finance</small></button>
+    <button class="btn btn-nav" data-modal="activities">Do<br><small>Activities</small><span class="nav-badge" id="badge-activities" style="display:none"></span></button>
+    <button class="btn btn-nav" data-modal="relationships">People<br><small>Relations</small><span class="nav-badge" id="badge-relationships" style="display:none"></span></button>
+    <button class="btn btn-nav" data-modal="career">Work<br><small>Career</small><span class="nav-badge" id="badge-career" style="display:none"></span></button>
+    <button class="btn btn-nav" data-modal="education">Learn<br><small>Education</small><span class="nav-badge" id="badge-education" style="display:none"></span></button>
+    <button class="btn btn-nav" data-modal="assets">Assets<br><small>Finance</small><span class="nav-badge" id="badge-assets" style="display:none"></span></button>
     <button class="btn btn-nav btn-cheat" data-modal="cheats">Cheats<br><small>God Mode</small></button>
   </div>
 
@@ -178,6 +178,7 @@
     <div id="death-name" class="death-name"></div>
     <div id="death-years" class="death-years"></div>
     <div id="death-cause" class="death-cause"></div>
+    <div id="death-ribbon" class="death-ribbon" style="display:none"></div>
     <div id="death-stats" class="death-stats-grid"></div>
     <div id="death-highlights" class="death-highlights"></div>
     <div id="death-achievements" class="death-achievements"></div>
@@ -297,6 +298,9 @@
 <script src="js/ui.js"></script>
 <script src="js/cheats.js"></script>
 <script src="js/main.js"></script>
+
+<!-- Birthday flash overlay -->
+<div id="birthday-flash" style="display:none;position:fixed;inset:0;z-index:9999;pointer-events:none;display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:900;color:#fff;text-shadow:0 2px 12px #0008;background:transparent;transition:opacity .5s"></div>
 
 </body>
 </html>

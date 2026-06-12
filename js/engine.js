@@ -154,6 +154,10 @@ const Engine = (() => {
     processStartup(c);
     processJail(c);
     applyTherapyPassive(c);
+    checkStockMarket(c);
+    checkExReturns(c, g);
+    checkFriendEnemy(g);
+    processMilitary(c);
     c.negotiatedThisYear = false; // reset each year
 
     const stage = DATA.getStage(c.age);
@@ -200,8 +204,51 @@ const Engine = (() => {
   function applyPassiveEffects(c, g) {
     if (c.career.jobId && !c.career.retired) {
       c.money += c.career.salary;
+      // Income tax
+      const sal = c.career.salary;
+      const taxRate = sal > 160000 ? 0.37 : sal > 80000 ? 0.30 : sal > 40000 ? 0.22 : 0.10;
+      const tax = Math.round(sal * taxRate);
+      c.money -= tax;
+      if (!c.taxesPaid) c.taxesPaid = 0;
+      c.taxesPaid += tax;
       c.career.yearsAtJob++;
     }
+    // Personal loan interest & repayment
+    if (c.personalLoan > 0) {
+      const interest = Math.round(c.personalLoan * 0.09);
+      const pay = Math.min(c.personalLoan + interest, Math.round((c.personalLoan + interest) * 0.15) + 500);
+      c.money -= pay;
+      c.personalLoan = Math.max(0, c.personalLoan + interest - pay);
+    }
+    // Gym membership passive health
+    if (c.gymMembership) {
+      if (c.money >= 600) { c.money -= 600; c.health = State.clampStat(c.health + 2); }
+      else c.gymMembership = false;
+    }
+    // Personal trainer passive health
+    if (c.personalTrainer) {
+      if (c.money >= 2000) { c.money -= 2000; c.health = State.clampStat(c.health + 5); }
+      else c.personalTrainer = false;
+    }
+    // Insurance premiums
+    if (c.insurance?.health && c.money >= 500)  c.money -= 500;
+    else if (c.insurance?.health) c.insurance.health = false;
+    if (c.insurance?.home && c.assets.houses.length > 0 && c.money >= 400)  c.money -= 400;
+    else if (c.insurance?.home) c.insurance.home = false;
+    if (c.insurance?.car && c.assets.cars.length > 0 && c.money >= 300)  c.money -= 300;
+    else if (c.insurance?.car) c.insurance.car = false;
+    // Social media passive income (fame 30+ = micro-influencer)
+    if ((c.fame||0) >= 30 && c.socialMediaActive) {
+      const income = Math.round(((c.fame||0) - 28) * 80 * (1 + Math.random()*0.4));
+      c.money += income;
+    }
+    // Rental income from extra properties
+    c.assets.houses.forEach(h => {
+      if (h.isRental) {
+        const rent = Math.round(h.value * (0.05 + Math.random() * 0.03));
+        c.money += rent;
+      }
+    });
     if (c.education.studentLoan > 0) {
       const pay = Math.min(c.education.studentLoan, Math.round(c.education.studentLoan * 0.1) + 1000);
       c.education.studentLoan -= pay;
@@ -389,10 +436,15 @@ const Engine = (() => {
     highlights.push(`Final net worth: ${DATA.fmtMoney(nw)}`);
     if (c.assets.houses.length) highlights.push(`Owned ${c.assets.houses.length} propert${c.assets.houses.length>1?'ies':'y'}`);
     if (c.hobbies.length) highlights.push(`Hobbies: ${c.hobbies.map(h=>DATA.getHobby(h.id)?.name||h.id).join(', ')}`);
+    if (c.militaryVeteran) highlights.push('Served in the military');
+    if (c.wroteMemoir) highlights.push('Published a memoir');
+    if (c.will) highlights.push(`Left a will: ${c.will.label}`);
+    const cause = g.deathCause || 'Unknown';
+    const ribbon = getDeathRibbon(c, g, cause);
     return {
       name: `${c.firstName} ${c.lastName}`,
       age: g.deathAge || c.age,
-      cause: g.deathCause || 'Unknown',
+      cause,
       highlights,
       netWorth: nw,
       achievements: g.achievements.map(id=>DATA.ACHIEVEMENTS.find(a=>a.id===id)).filter(Boolean),
@@ -400,6 +452,7 @@ const Engine = (() => {
       finalStats: { health:c.health, happiness:c.happiness, smarts:c.smarts, looks:c.looks },
       birthYear: c.birthYear,
       country: c.country,
+      ribbon,
     };
   }
 
@@ -609,6 +662,8 @@ const Engine = (() => {
       baseCost = Math.round(baseCost * 0.5);
     }
     // Apply any scholarship funds earned via requestScholarship()
+    // Apply GI Bill if available
+    if (c.giBill > 0) { c.scholarshipFunds = (c.scholarshipFunds||0) + c.giBill; c.giBill = 0; }
     const schFunds = Math.min(c.scholarshipFunds || 0, baseCost);
     if (schFunds > 0) { baseCost -= schFunds; c.scholarshipFunds = (c.scholarshipFunds || 0) - schFunds; }
     const institutions = ['State University','City College','Northern University','Westbrook College','Pacific University'];
@@ -754,6 +809,17 @@ const Engine = (() => {
     const amt = win ? Math.round(bet * (1.5 + Math.random()*2)) : 0;
     if (win) c.money += amt;
     const msg = win ? `Won ${DATA.fmtMoney(amt)} at the casino!` : `Lost ${DATA.fmtMoney(bet)} at the casino.`;
+    // Gambling addiction tracking
+    c.casinoVisits = (c.casinoVisits || 0) + 1;
+    if (c.casinoVisits >= 4 && !(c.addictions||[]).find(a=>a.id==='gambling')) {
+      const addictChance = 0.08 * (c.casinoVisits - 3);
+      if (Math.random() < addictChance) {
+        c.addictions = c.addictions || [];
+        c.addictions.push({ id:'gambling', label:'Gambling Addiction', severity:1 });
+        State.addLog(c.age, 'Developed a gambling addiction.', 'bad');
+        UI.showToast('Gambling addiction developed. The casino calls you back...', 'bad');
+      }
+    }
     State.addLog(c.age, msg, win?'good':'bad'); State.saveGame();
     return { ok:true, win, amount: win ? amt : bet };
   }
@@ -1888,6 +1954,329 @@ const Engine = (() => {
     return { ok:true, msg };
   }
 
+  // ── Taxes info ───────────────────────────────────────────────
+  function getTaxInfo(c) {
+    const sal = c.career.salary || 0;
+    const rate = sal > 160000 ? 0.37 : sal > 80000 ? 0.30 : sal > 40000 ? 0.22 : 0.10;
+    return { rate, annual: Math.round(sal * rate), paid: c.taxesPaid || 0 };
+  }
+
+  // ── Bank loan ─────────────────────────────────────────────────
+  function takeLoan(amount) {
+    const c = State.getChar();
+    if (c.personalLoan > 0) return { ok:false, msg:'Already have an outstanding personal loan.' };
+    const maxLoan = Math.max(5000, (c.career.salary||0) * 3);
+    if (amount > maxLoan) return { ok:false, msg:`Max loan based on income: ${DATA.fmtMoney(maxLoan)}.` };
+    c.personalLoan = amount;
+    c.money += amount;
+    State.addLog(c.age, `Took a personal loan of ${DATA.fmtMoney(amount)} at 9% interest.`, 'event');
+    State.saveGame();
+    return { ok:true, msg:`Loan approved! ${DATA.fmtMoney(amount)} deposited. 9% annual interest.` };
+  }
+
+  // ── Health care ───────────────────────────────────────────────
+  function healthCare(action) {
+    const c = State.getChar();
+    switch (action) {
+      case 'doctor': {
+        const cost = c.insurance?.health ? 50 : 200;
+        if (c.money < cost) return { ok:false, msg:`Doctor visit costs ${DATA.fmtMoney(cost)}.` };
+        c.money -= cost;
+        c.health = State.clampStat(c.health + 8);
+        State.applyEffects({ happiness: 3 });
+        State.addLog(c.age, `Doctor visit. Health improved.`, 'good');
+        State.saveGame();
+        return { ok:true, msg:`Doctor visit: health restored. Cost ${DATA.fmtMoney(cost)}.` };
+      }
+      case 'dentist': {
+        const cost = c.insurance?.health ? 40 : 300;
+        if (c.money < cost) return { ok:false, msg:`Dentist costs ${DATA.fmtMoney(cost)}.` };
+        c.money -= cost;
+        c.looks = State.clampStat(c.looks + 2);
+        State.applyEffects({ happiness: 4 });
+        State.addLog(c.age, 'Dental check-up.', 'good');
+        State.saveGame();
+        return { ok:true, msg:`Dentist done. Smile improved! Cost ${DATA.fmtMoney(cost)}.` };
+      }
+      case 'optometrist': {
+        const cost = c.insurance?.health ? 30 : 150;
+        if (c.money < cost) return { ok:false, msg:`Optometrist costs ${DATA.fmtMoney(cost)}.` };
+        c.money -= cost;
+        c.smarts = State.clampStat(c.smarts + 2);
+        State.applyEffects({ happiness: 2 });
+        State.addLog(c.age, 'Eye check-up.', 'good');
+        State.saveGame();
+        return { ok:true, msg:`Eyes checked. Vision clear! Cost ${DATA.fmtMoney(cost)}.` };
+      }
+      case 'gym': {
+        if (c.gymMembership) return { ok:false, msg:'Already have a gym membership ($600/yr).' };
+        if (c.money < 600) return { ok:false, msg:'Need $600 to start.' };
+        c.money -= 600;
+        c.gymMembership = true;
+        State.addLog(c.age, 'Joined the gym. $600/yr.', 'good');
+        State.saveGame();
+        return { ok:true, msg:'Gym membership active! +2 health/year.' };
+      }
+      case 'cancel_gym':
+        c.gymMembership = false;
+        State.saveGame();
+        return { ok:true, msg:'Gym membership cancelled.' };
+      case 'trainer': {
+        if (c.personalTrainer) return { ok:false, msg:'Already have a personal trainer ($2,000/yr).' };
+        if (c.money < 2000) return { ok:false, msg:'Need $2,000 to start.' };
+        c.money -= 2000;
+        c.personalTrainer = true;
+        State.addLog(c.age, 'Hired a personal trainer. $2,000/yr.', 'good');
+        State.saveGame();
+        return { ok:true, msg:'Personal trainer hired! +5 health/year.' };
+      }
+      case 'cancel_trainer':
+        c.personalTrainer = false;
+        State.saveGame();
+        return { ok:true, msg:'Personal trainer cancelled.' };
+      default: return { ok:false, msg:'Unknown action.' };
+    }
+  }
+
+  // ── Insurance ─────────────────────────────────────────────────
+  function manageInsurance(type, buy) {
+    const c = State.getChar();
+    c.insurance = c.insurance || {};
+    const costs = { health:500, home:400, car:300 };
+    if (buy) {
+      if (c.insurance[type]) return { ok:false, msg:`Already have ${type} insurance.` };
+      if (c.money < costs[type]) return { ok:false, msg:`Need ${DATA.fmtMoney(costs[type])} to start.` };
+      c.money -= costs[type];
+      c.insurance[type] = true;
+      State.addLog(c.age, `Got ${type} insurance. $${costs[type]}/yr.`, 'good');
+    } else {
+      c.insurance[type] = false;
+      State.addLog(c.age, `Cancelled ${type} insurance.`, 'event');
+    }
+    State.saveGame();
+    return { ok:true, msg: buy ? `${type} insurance active.` : `${type} insurance cancelled.` };
+  }
+
+  // ── Tattoo removal ────────────────────────────────────────────
+  function removeTattoo() {
+    const c = State.getChar();
+    if (!c.tattoos || c.tattoos < 1) return { ok:false, msg:'No tattoos to remove.' };
+    const cost = 800;
+    if (c.money < cost) return { ok:false, msg:`Tattoo removal costs ${DATA.fmtMoney(cost)}.` };
+    c.money -= cost;
+    c.tattoos--;
+    State.addLog(c.age, 'Had a tattoo removed.', 'activity');
+    State.saveGame();
+    return { ok:true, msg:'Tattoo removed. Painful but worth it.' };
+  }
+
+  // ── Write memoir ──────────────────────────────────────────────
+  function writeMemoirAction() {
+    const c = State.getChar();
+    if (c.age < 60) return { ok:false, msg:'Memoirs are for people with a life to look back on (60+).' };
+    if (c.wroteMemoir) return { ok:false, msg:'Already wrote your memoir.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy.' };
+    spendEnergy();
+    c.wroteMemoir = true;
+    const advance = Math.round(10000 + (c.age - 60) * 500 + (c.fame||0) * 300);
+    c.money += advance;
+    State.applyEffects({ happiness: 20 });
+    State.addLog(c.age, `Wrote memoir: earned ${DATA.fmtMoney(advance)}.`, 'good');
+    State.saveGame();
+    return { ok:true, msg:`Memoir published! Earned ${DATA.fmtMoney(advance)}.` };
+  }
+
+  // ── Best friend ───────────────────────────────────────────────
+  function setBestFriend(relId) {
+    const g = State.get(); const c = g.character;
+    const rel = g.relationships.find(r => r.id === relId && r.type === 'friend' && r.status === 'active');
+    if (!rel) return { ok:false, msg:'Must be an active friend.' };
+    if (rel.relationship < 60) return { ok:false, msg:'Need 60+ bond to be best friends.' };
+    g.relationships.forEach(r => { if (r.isBestFriend) r.isBestFriend = false; });
+    rel.isBestFriend = true;
+    State.applyEffects({ happiness: 10 });
+    State.addLog(c.age, `${rel.name} is now your best friend.`, 'rel');
+    State.saveGame();
+    return { ok:true, msg:`${rel.name} is your best friend!` };
+  }
+
+  // ── Ghosting ──────────────────────────────────────────────────
+  function ghostPerson(relId) {
+    const g = State.get(); const c = g.character;
+    const rel = g.relationships.find(r => r.id === relId && r.status === 'active');
+    if (!rel) return { ok:false, msg:'Person not found.' };
+    rel.relationship = Math.max(0, rel.relationship - 25);
+    if (rel.relationship === 0) { rel.status = 'ghosted'; rel.type = 'ex'; }
+    State.addLog(c.age, `Ghosted ${rel.name}.`, 'event');
+    State.saveGame();
+    return { ok:true, msg:`Ghosted ${rel.name}. They got the message.` };
+  }
+
+  // ── Toggle rental status on a house ─────────────────────────
+  function toggleRental(houseIdx) {
+    const c = State.getChar();
+    const h = c.assets.houses[houseIdx];
+    if (!h) return { ok:false, msg:'House not found.' };
+    h.isRental = !h.isRental;
+    const msg = h.isRental ? `${h.name} set as rental. Earns ~${DATA.fmtMoney(Math.round(h.value*0.06))}/yr.` : `${h.name} no longer rented out.`;
+    State.addLog(c.age, msg, 'career');
+    State.saveGame();
+    return { ok:true, msg };
+  }
+
+  // ── Military service ──────────────────────────────────────────
+  function enlistMilitary() {
+    const c = State.getChar();
+    if (c.age < 18 || c.age > 30) return { ok:false, msg:'Enlistment open age 18–30.' };
+    if (c.inMilitary) return { ok:false, msg:'Already serving.' };
+    if (c.education.inSchool) return { ok:false, msg:'Finish school first.' };
+    c.inMilitary = true;
+    c.militaryYearsLeft = 4;
+    if (c.career.jobId) quitJob(false);
+    State.applyEffects({ health: 10, happiness: -5 });
+    State.addLog(c.age, 'Enlisted in the military. 4-year service commitment.', 'career');
+    State.saveGame();
+    return { ok:true, msg:'Enlisted! 4 years of service. Health boost, good pay, GI Bill on exit.' };
+  }
+
+  function processMilitary(c) {
+    if (!c.inMilitary) return;
+    const salary = 32000;
+    const tax = Math.round(salary * 0.10);
+    c.money += salary - tax;
+    c.health = State.clampStat(c.health + 3);
+    c.militaryYearsLeft--;
+    if (Math.random() < 0.05) { // deployment/PTSD risk
+      State.applyEffects({ mentalHealth: -15, happiness: -10 });
+      State.addLog(c.age, 'Deployed overseas. Tough year mentally.', 'bad');
+    }
+    if (c.militaryYearsLeft <= 0) {
+      c.inMilitary = false;
+      c.militaryVeteran = true;
+      c.giBill = 30000; // education benefit
+      State.applyEffects({ happiness: 15 });
+      State.addLog(c.age, 'Honorably discharged. GI Bill education benefit: $30,000 unlocked.', 'good');
+      UI.showToast('Military service complete! GI Bill unlocked.', 'good');
+    }
+  }
+
+  // ── Prison activities ─────────────────────────────────────────
+  function doPrisonActivity(actId) {
+    const c = State.getChar();
+    if (!c.inJail) return { ok:false, msg:'Not in jail.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy.' };
+    spendEnergy();
+    const acts = {
+      workout:     { msg:'Worked out in the yard. Health up.', effects:{ health:8, happiness:-2 } },
+      read:        { msg:'Read books in the library. Smarts up.', effects:{ smarts:5, happiness:3 } },
+      meditate:    { msg:'Meditated in your cell. Mental health up.', effects:{ mentalHealth:8, happiness:5 } },
+      make_friend: { msg:'Made a friend inside.', effects:{ happiness:8 }, addFriend:true },
+      fight:       { msg:'Got in a prison fight.', effects:{ health:-5, happiness:-5 }, risk:true },
+    };
+    const act = acts[actId];
+    if (!act) return { ok:false, msg:'Unknown activity.' };
+    if (act.risk && Math.random() < 0.3) {
+      c.jailYearsLeft++;
+      State.applyEffects({ health:-10, happiness:-10 });
+      State.addLog(c.age, 'Prison fight — got extra time added to sentence.', 'bad');
+      State.saveGame();
+      return { ok:true, msg:'Lost the fight and got extra time. Bad idea.' };
+    }
+    State.applyEffects(act.effects);
+    if (act.addFriend) {
+      const nm = DATA.randomName(Math.random()<0.5?'female':'male');
+      State.addRelationship({ name:nm.full, type:'friend', subtype:'friend', age:c.age+Math.floor(Math.random()*10)-5, relationship:45, traits:DATA.randomTraits(2), status:'active' });
+    }
+    State.addLog(c.age, `Prison: ${act.msg}`, 'event');
+    State.saveGame();
+    return { ok:true, msg: act.msg };
+  }
+
+  // ── Stock market events ───────────────────────────────────────
+  function checkStockMarket(c) {
+    if (c.assets.investments <= 0) return;
+    const roll = Math.random();
+    if (roll < 0.06) { // crash
+      const loss = Math.round(c.assets.investments * (0.25 + Math.random()*0.3));
+      c.assets.investments = Math.max(0, c.assets.investments - loss);
+      State.applyEffects({ happiness:-12 });
+      State.addLog(c.age, `Stock market crash! Lost ${DATA.fmtMoney(loss)} in investments.`, 'bad');
+      UI.showToast(`Market crash! -${DATA.fmtMoney(loss)}`, 'bad');
+    } else if (roll < 0.12) { // boom
+      const gain = Math.round(c.assets.investments * (0.2 + Math.random()*0.3));
+      c.assets.investments += gain;
+      State.applyEffects({ happiness: 8 });
+      State.addLog(c.age, `Market boom! Investments grew by ${DATA.fmtMoney(gain)}.`, 'good');
+      UI.showToast(`Market boom! +${DATA.fmtMoney(gain)}`, 'good');
+    }
+  }
+
+  // ── Ex returns ────────────────────────────────────────────────
+  function checkExReturns(c, g) {
+    if (State.getPartner()) return; // already with someone
+    if (c.sexuality === 'asexual') return;
+    const exes = g.relationships.filter(r => r.type === 'ex' && r.status !== 'rekindled');
+    if (!exes.length) return;
+    if (Math.random() > 0.08) return;
+    const ex = DATA.randomFrom(exes);
+    ex.status = 'rekindled';
+    State.addLog(c.age, `${ex.name} reached out. Old feelings surfaced.`, 'rel');
+    UI.showToast(`${ex.name} is back in your life. Check Relationships.`, 'info');
+    ex.reachedOut = true;
+  }
+
+  // ── Friends → enemies ─────────────────────────────────────────
+  function checkFriendEnemy(g) {
+    g.relationships.forEach(rel => {
+      if (rel.type === 'friend' && rel.status === 'active' && rel.relationship <= 10) {
+        rel.type = 'enemy';
+        rel.subtype = 'enemy';
+        State.addLog(0, `${rel.name} has become an enemy.`, 'bad');
+        // Enemies occasionally cause negative events passively
+      }
+    });
+    // Enemy passive damage
+    const enemies = g.relationships.filter(r => r.type === 'enemy' && r.status === 'active');
+    if (enemies.length > 0 && Math.random() < 0.2) {
+      const enemy = DATA.randomFrom(enemies);
+      State.applyEffects({ happiness:-5, reputation:-3 });
+      State.addLog(g.character.age, `${enemy.name} (enemy) caused trouble for you.`, 'bad');
+    }
+  }
+
+  // ── Special death ribbons ────────────────────────────────────
+  function getDeathRibbon(c, g, cause) {
+    if (c.age >= 100) return { ribbon:'Centenarian', desc:'Lived a full century.' };
+    if (c.age >= 90)  return { ribbon:'Elder', desc:'Lived a long, full life.' };
+    if ((c.addictions||[]).some(a=>a.severity>=3) && c.health < 20) return { ribbon:'Lost to Addiction', desc:'Substance abuse cut life short.' };
+    if (c.criminalRecord && c.inJail) return { ribbon:'Behind Bars', desc:'Died while incarcerated.' };
+    if (cause === 'Sudden accident') return { ribbon:'Gone Too Soon', desc:'A tragic accident ended it all.' };
+    if (g.relationships.filter(r=>r.subtype==='child').length >= 5) return { ribbon:'Legacy Builder', desc:'Left a large family behind.' };
+    if (Engine.getNetWorth(c) >= 10000000) return { ribbon:'Mogul', desc:'Died with immense wealth.' };
+    if ((c.fame||0) >= 80) return { ribbon:'Legend', desc:'Left a mark on the world.' };
+    if (c.militaryVeteran) return { ribbon:'Veteran', desc:'Served with honour.' };
+    if (c.wroteMemoir) return { ribbon:'Author', desc:'Told their story.' };
+    if (c.will) return { ribbon:'Prepared', desc:'Left the world in order.' };
+    return null;
+  }
+
+  // ── Horoscope ────────────────────────────────────────────────
+  const ZODIAC = ['Capricorn','Aquarius','Pisces','Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius'];
+  const HOROSCOPE_LINES = [
+    'The stars favour bold decisions this year.','Unexpected financial opportunity ahead.',
+    'A relationship deepens in surprising ways.','Guard your health — pace yourself.',
+    'Your creative energy is at its peak.','Someone from the past re-enters your orbit.',
+    'A risk taken now pays off later.','Stay patient — your time is coming.',
+    'Trust your instincts more than logic today.','Romance is in the air.',
+    'Hard work this year plants seeds for the future.','Let go of what no longer serves you.',
+  ];
+
+  function getHoroscope(c) {
+    const sign = ZODIAC[(c.birthYear || 1990) % 12];
+    const line = HOROSCOPE_LINES[Math.floor(Math.random() * HOROSCOPE_LINES.length)];
+    return { sign, line };
+  }
+
   // ── Therapy ───────────────────────────────────────────────────
   function startTherapy() {
     const c = State.getChar();
@@ -2335,6 +2724,10 @@ const Engine = (() => {
     startTherapy, stopTherapy, collegeAction, cheatOnPartner,
     launchStartup, STARTUP_TYPES, commitCrime, payBail, CRIMES,
     careForParent, writeWill, WILL_OPTIONS,
+    getTaxInfo, takeLoan, healthCare, manageInsurance,
+    removeTattoo, writeMemoirAction, setBestFriend, ghostPerson,
+    toggleRental, enlistMilitary, doPrisonActivity,
+    getHoroscope, ZODIAC,
     startHobby, practiceHobby,
     joinExtracurricular, participateExtracurricular,
     socializeAtSchool, meetRomanticInterest,
