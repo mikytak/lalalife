@@ -138,6 +138,7 @@ const Engine = (() => {
     applyMentalHealthDrift(c, g);
     applyMoodDrift(c);
     applyPassiveEffects(c, g);
+    applySubscriptionPassive(c);
     processConditions(c);
     processAddictions(c);
     updateEducation(c, g);
@@ -333,9 +334,10 @@ const Engine = (() => {
     if (Math.random() < chance) {
       c.career.promotionLevel++;
       c.career.title  = next.title;
-      c.career.salary = Math.round(career.salary.base * next.salaryMult);
-      State.addLog(c.age, `Promoted to ${next.title} — ${DATA.fmtMoney(c.career.salary)}/yr`, 'career');
-      UI.showToast(`Promoted to ${next.title}!`, 'good');
+      c.career.salary = Math.round(career.salary.base * next.salaryMult * (1 + (hobbyBonus + extraBonus) * 0.1));
+      State.addLog(c.age, `Promoted to ${next.title} — now earning ${DATA.fmtMoney(c.career.salary)}/yr!`, 'career');
+      UI.showToast(`🎉 Promoted to ${next.title}! Now earning ${DATA.fmtMoney(c.career.salary)}/yr`, 'good');
+      UI.updateDisplay();
     }
   }
 
@@ -657,8 +659,13 @@ const Engine = (() => {
     if (lvl === 'master')   { nextLevel = 'doctorate'; duration = 4; baseCost = 60000; }
     if (lvl === 'doctorate') return { ok:false, msg:'Already have the highest degree.' };
     if ((c.education.gpa || 2.5) < 2.0) return { ok:false, msg:'GPA too low for university (need 2.0+). Study hard first.' };
-    // Scholarship: GPA 3.5+ = 50% off
-    if ((c.education.gpa || 2.5) >= 3.5) {
+    // Scholarship: 4.0 GPA = fully funded; 3.5+ = 50% off
+    const gpa = c.education.gpa || 2.5;
+    if (gpa >= 4.0) {
+      baseCost = 0;
+      State.addLog(c.age, 'Perfect GPA — full scholarship awarded!', 'edu');
+      UI.showToast('4.0 GPA — full scholarship! Tuition free.', 'good');
+    } else if (gpa >= 3.5) {
       baseCost = Math.round(baseCost * 0.5);
     }
     // Apply any scholarship funds earned via requestScholarship()
@@ -915,6 +922,7 @@ const Engine = (() => {
     c.money -= v.cost;
     const rel = g.relationships.find(r => r.id === relId);
     const name = rel ? rel.name : 'your partner';
+    if (rel) rel.marriedWedding = true; // prevent re-doing
     State.applyEffects({ happiness:v.happiness });
     State.addLog(c.age, `Wedding at ${v.name} with ${name}. Beautiful day.`, 'rel');
     State.saveGame();
@@ -1543,6 +1551,22 @@ const Engine = (() => {
     return { ok:true, msg:`Hung out with ${members.length} friends. Everyone's closer now!` };
   }
 
+  function familyHangout() {
+    const g = State.get(); const c = g.character;
+    const family = g.relationships.filter(r => r.type === 'family' && r.status === 'active');
+    if (!family.length) return { ok:false, msg:'No living family members.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    spendEnergy();
+    family.forEach(rel => { rel.relationship = Math.min(100, rel.relationship + 10); });
+    const happBoost = 12 + family.length * 2;
+    State.applyEffects({ happiness: happBoost, mentalHealth: 8 });
+    triggerMood('content', 2);
+    const names = family.slice(0,3).map(r=>r.name.split(' ')[0]).join(', ');
+    State.addLog(c.age, `Family hangout with ${names}${family.length>3?' and more':''}. Warm and wonderful.`, 'rel');
+    State.saveGame();
+    return { ok:true, msg:`Family time with ${family.length} loved one${family.length>1?'s':''}. Everyone's bond grew!` };
+  }
+
   function groupTrip(destinationId) {
     const g = State.get(); const c = g.character;
     const members = c.socialCircle
@@ -1952,6 +1976,60 @@ const Engine = (() => {
     State.addLog(c.age, msg, 'good');
     State.saveGame();
     return { ok:true, msg };
+  }
+
+  // ── Subscriptions ─────────────────────────────────────────────
+  const SUBSCRIPTIONS = [
+    { id:'library',    label:'Library Card',         cost:120,  desc:'+3 smarts/yr',           effects:{ smarts:3 } },
+    { id:'gym_sub',    label:'Gym Membership',       cost:600,  desc:'+3 health/yr',           effects:{ health:3 } },
+    { id:'streaming',  label:'Streaming Services',   cost:240,  desc:'+4 happiness/yr',        effects:{ happiness:4 } },
+    { id:'meditation', label:'Meditation App',       cost:100,  desc:'+4 mental health/yr',    effects:{ mentalHealth:4 } },
+    { id:'meal_kit',   label:'Meal Kit Delivery',    cost:800,  desc:'+2 health, +2 happiness/yr', effects:{ health:2, happiness:2 } },
+    { id:'news',       label:'News Subscription',    cost:150,  desc:'+2 smarts, +1 happiness/yr', effects:{ smarts:2, happiness:1 } },
+    { id:'beauty_box', label:'Beauty/Grooming Box',  cost:300,  desc:'+3 looks/yr',            effects:{ looks:3 } },
+    { id:'audiobooks', label:'Audiobook Service',    cost:180,  desc:'+2 smarts, +2 happiness/yr', effects:{ smarts:2, happiness:2 } },
+  ];
+
+  function toggleSubscription(subId) {
+    const c = State.getChar();
+    const sub = SUBSCRIPTIONS.find(s => s.id === subId);
+    if (!sub) return { ok:false, msg:'Unknown subscription.' };
+    // gym_sub and gymMembership share the same slot
+    if (subId === 'gym_sub') {
+      if (c.gymMembership) { c.gymMembership = false; State.saveGame(); return { ok:true, msg:'Gym membership cancelled.' }; }
+      if (c.money < sub.cost) return { ok:false, msg:`Need ${DATA.fmtMoney(sub.cost)}.` };
+      c.money -= sub.cost; c.gymMembership = true; State.saveGame();
+      return { ok:true, msg:'Gym membership active! +3 health/year.' };
+    }
+    c.subscriptions = c.subscriptions || {};
+    if (c.subscriptions[subId]) {
+      c.subscriptions[subId] = false;
+      State.addLog(c.age, `Cancelled ${sub.label}.`, 'event');
+      State.saveGame();
+      return { ok:true, msg:`${sub.label} cancelled.` };
+    }
+    if (c.money < sub.cost) return { ok:false, msg:`Need ${DATA.fmtMoney(sub.cost)}.` };
+    c.money -= sub.cost;
+    c.subscriptions[subId] = true;
+    State.addLog(c.age, `Subscribed to ${sub.label}.`, 'activity');
+    State.saveGame();
+    return { ok:true, msg:`${sub.label} active! ${sub.desc}` };
+  }
+
+  function applySubscriptionPassive(c) {
+    c.subscriptions = c.subscriptions || {};
+    let totalCost = 0;
+    SUBSCRIPTIONS.forEach(sub => {
+      if (sub.id === 'gym_sub') return; // handled by gymMembership
+      if (!c.subscriptions[sub.id]) return;
+      if (c.money < sub.cost) { c.subscriptions[sub.id] = false; State.addLog(c.age, `Could not afford ${sub.label} — cancelled.`, 'bad'); return; }
+      c.money -= sub.cost;
+      totalCost += sub.cost;
+      Object.entries(sub.effects).forEach(([stat, val]) => {
+        if (stat === 'mentalHealth') c.mentalHealth = State.clampStat((c.mentalHealth||80) + val);
+        else if (stat in c) c[stat] = State.clampStat(c[stat] + val);
+      });
+    });
   }
 
   // ── Taxes info ───────────────────────────────────────────────
@@ -2724,6 +2802,7 @@ const Engine = (() => {
     startTherapy, stopTherapy, collegeAction, cheatOnPartner,
     launchStartup, STARTUP_TYPES, commitCrime, payBail, CRIMES,
     careForParent, writeWill, WILL_OPTIONS,
+    SUBSCRIPTIONS, toggleSubscription,
     getTaxInfo, takeLoan, healthCare, manageInsurance,
     removeTattoo, writeMemoirAction, setBestFriend, ghostPerson,
     toggleRental, enlistMilitary, doPrisonActivity,
@@ -2736,7 +2815,7 @@ const Engine = (() => {
     adoptPet, vetPet, playWithPet,
     doSocialMedia, doSideHustle, travel,
     triggerMood, manageCondition,
-    addToCircle, removeFromCircle, groupHangout, groupTrip,
+    addToCircle, removeFromCircle, groupHangout, familyHangout, groupTrip,
     browseOnlineDating, connectWithMatch,
     changeStyle, getTattoo,
     depositSavings, withdrawSavings, payDebt,

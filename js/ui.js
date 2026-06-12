@@ -659,7 +659,6 @@ const UI = (() => {
         { id:'doctor',   label:'Doctor Visit',       sub:`${hasHealthIns?'$50 (insured)':'$200'} · +8 health` },
         { id:'dentist',  label:'Dentist',            sub:`${hasHealthIns?'$40 (insured)':'$300'} · +looks, +mood` },
         { id:'optometrist', label:'Optometrist',     sub:`${hasHealthIns?'$30 (insured)':'$150'} · +smarts` },
-        { id:'gym',      label: c.gymMembership ? 'Cancel Gym ($600/yr active)' : 'Join Gym',   sub:'$600/yr · +2 health/year', action: c.gymMembership ? 'cancel_gym' : 'gym' },
         { id:'trainer',  label: c.personalTrainer ? 'Cancel Trainer ($2k/yr active)' : 'Personal Trainer', sub:'$2,000/yr · +5 health/year', action: c.personalTrainer ? 'cancel_trainer' : 'trainer' },
       ];
       hcActions.forEach(act => {
@@ -676,6 +675,36 @@ const UI = (() => {
         div.appendChild(tatCard);
       }
     }
+
+    // ── Subscriptions ────────────────────────────────────────
+    { const subHdr2 = document.createElement('div'); subHdr2.className = 'section-title'; subHdr2.textContent = 'Subscriptions'; div.appendChild(subHdr2);
+      c.subscriptions = c.subscriptions || {};
+      const activeSubs = Engine.SUBSCRIPTIONS.filter(s => s.id !== 'gym_sub' ? c.subscriptions[s.id] : c.gymMembership);
+      const totalSubCost = Engine.SUBSCRIPTIONS.reduce((sum, s) => {
+        const on = s.id === 'gym_sub' ? c.gymMembership : c.subscriptions[s.id];
+        return sum + (on ? s.cost : 0);
+      }, 0);
+      if (totalSubCost > 0) {
+        const costBadge = document.createElement('div'); costBadge.className = 'text-dim'; costBadge.style.cssText = 'font-size:.75rem;margin-bottom:6px';
+        costBadge.textContent = `Total: ${DATA.fmtMoney(totalSubCost)}/yr`;
+        div.appendChild(costBadge);
+      }
+      Engine.SUBSCRIPTIONS.forEach(sub => {
+        const active = sub.id === 'gym_sub' ? !!c.gymMembership : !!c.subscriptions[sub.id];
+        const card = document.createElement('div'); card.className = 'item-card clickable';
+        card.innerHTML = `
+          <div class="flex-between">
+            <span class="fw-700">${sub.label} ${active ? '✓' : ''}</span>
+            <span class="${active ? 'text-green' : 'text-dim'}">${DATA.fmtMoney(sub.cost)}/yr</span>
+          </div>
+          <div class="text-dim">${sub.desc}${active ? ' · <span style="color:var(--green)">Active</span>' : ''}</div>`;
+        card.addEventListener('click', () => {
+          const r = Engine.toggleSubscription(sub.id);
+          showToast(r.msg, r.ok ? 'good' : 'bad');
+          updateDisplay(); renderActivities();
+        });
+        div.appendChild(card);
+      }); }
 
     // ── Military (age 18–30) ──────────────────────────────────
     if (c.age >= 18 && c.age <= 30 && !c.militaryVeteran) {
@@ -1132,7 +1161,22 @@ const UI = (() => {
       empty.innerHTML = '<div class="empty-icon">?</div>No relationships yet.';
       div.appendChild(empty); return;
     }
-    const groups = { partner:'Romantic', family:'Family', friend:'Friends', ex:'Former Partners & Exes' };
+    // Family group hangout button
+    const familyMembers = g.relationships.filter(r => r.type==='family' && r.status==='active');
+    if (familyMembers.length >= 1) {
+      const famHangBtn = document.createElement('button');
+      famHangBtn.className = 'btn btn-secondary btn-full mb-8';
+      famHangBtn.innerHTML = `Family Hangout (${familyMembers.length})<br><small class="text-dim">Boost all family bonds · 1 energy</small>`;
+      famHangBtn.disabled = !Engine.hasEnergy();
+      famHangBtn.addEventListener('click', () => {
+        const r = Engine.familyHangout();
+        showToast(r.msg, r.ok ? 'good' : 'bad');
+        if (r.ok) { updateDisplay(); renderRelationships(); }
+      });
+      div.appendChild(famHangBtn);
+    }
+
+    const groups = { partner:'Romantic', family:'Family', friend:'Friends', ex:'Former Partners & Exes', enemy:'Enemies' };
     for (const [type, label] of Object.entries(groups)) {
       const rels = g.relationships.filter(r => r.type === type);
       if (!rels.length) continue;
@@ -1222,12 +1266,15 @@ const UI = (() => {
       actions.push({ id:'serenade',       label:'Serenade Them',       sub:`Music hobby helps! · 1 energy`,              energy:true });
       actions.push({ id:'weekend_getaway',label:'Weekend Getaway',     sub:'-$400, big happiness boost · 1 energy',      energy:true });
 
-      if (rel.subtype !== 'spouse') {
+      const alreadySpouse = State.get().relationships.some(r => r.subtype==='spouse' && r.status==='active');
+      if (rel.subtype !== 'spouse' && !alreadySpouse) {
         actions.push({ id:'propose', label:'Propose', sub:'Need 60+ relationship, age 18+ · free', energy:false, disabled: rel.relationship < 60 || c.age < 18 });
       }
       actions.push({ id:'_cheat', label:'Have an Affair', sub:'35% chance of getting caught · 1 energy', energy:true, isCheat:true });
       if (rel.subtype === 'spouse') {
-        actions.push({ id:'plan_wedding', label:'Plan the Wedding', sub:'Choose a venue and celebrate · free', energy:false, isWedding:true });
+        if (!rel.marriedWedding) {
+          actions.push({ id:'plan_wedding', label:'Plan the Wedding', sub:'Choose a venue and celebrate · free', energy:false, isWedding:true });
+        }
         if (c.age >= 18 && c.age <= 50) {
           actions.push({ id:'plan_child_btn', label:'Try for a Child', sub:'Choose name and gender · 1 energy', energy:true, isPlanChild:true });
         }
