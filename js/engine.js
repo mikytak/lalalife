@@ -1324,7 +1324,8 @@ const Engine = (() => {
     if (c.age < 12) return { ok:false, msg:'Too young for romance.' };
     if (c.sexuality === 'asexual') return { ok:false, msg:'Romance is not really your thing.' };
     const alreadyHasPartner = State.getPartner();
-    if (alreadyHasPartner) return { ok:false, msg:'Already in a relationship.' };
+    const relStyle = c.relationshipStyle || 'monogamous';
+    if (alreadyHasPartner && relStyle !== 'polyamorous') return { ok:false, msg:'Already in a relationship.' };
     if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
     const gen = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender === 'male' ? 'female' : 'male');
     const nm  = DATA.randomName(gen);
@@ -1756,7 +1757,8 @@ const Engine = (() => {
     if (c.age < 18) return { ok:false, msg:'Must be 18+ for Raya.' };
     if (c.sexuality === 'asexual') return { ok:false, msg:'Not really your thing.' };
     if ((c.fame || 0) < RAYA_FAME_MIN) return { ok:false, msg:`You need at least ${RAYA_FAME_MIN} fame to join Raya. Keep building your profile.` };
-    if (State.getPartner()) return { ok:false, msg:'Already in a relationship.' };
+    const _rayaRelStyle = State.getChar().relationshipStyle || 'monogamous';
+    if (State.getPartner() && _rayaRelStyle !== 'polyamorous') return { ok:false, msg:'Already in a relationship.' };
     if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
     // 3 Raya profiles — mix of famous and royal
     const profiles = [generateRayaProfile(c), generateRayaProfile(c), generateRayaProfile(c)];
@@ -1766,7 +1768,8 @@ const Engine = (() => {
   function connectWithMatch(profile) {
     const c = State.getChar();
     const alreadyHasPartner = State.getPartner();
-    if (alreadyHasPartner) return { ok:false, msg:'Already in a relationship.' };
+    const _connectRelStyle = State.getChar().relationshipStyle || 'monogamous';
+    if (alreadyHasPartner && _connectRelStyle !== 'polyamorous') return { ok:false, msg:'Already in a relationship.' };
     // Raya profiles are harder to match — they weight your fame heavily
     let successChance;
     if (profile.isRaya) {
@@ -2751,6 +2754,49 @@ const Engine = (() => {
     }
   }
 
+  // ── Break up ──────────────────────────────────────────────────
+  function breakUpWith(relId) {
+    const g = State.get(); const c = g.character;
+    const rel = g.relationships.find(r => r.id === relId);
+    if (!rel || rel.status !== 'active') return { ok:false, msg:'Relationship not found.' };
+    if (rel.subtype === 'spouse') return { ok:false, msg:'You\'re married — you need to divorce.' };
+    const name = rel.name;
+    rel.status = 'broken_up'; rel.type = 'ex';
+    State.applyEffects({ happiness:-12, mentalHealth:-8 });
+    State.addLog(c.age, `Broke up with ${name}. 💔`, 'bad');
+    State.saveGame();
+    return { ok:true, msg:`You broke up with ${name}. It hurts, but sometimes it's for the best.` };
+  }
+
+  // ── Relationship style ────────────────────────────────────────
+  function setRelationshipStyle(relId, style) {
+    const g = State.get(); const c = g.character;
+    const rel = g.relationships.find(r => r.id === relId);
+    if (!rel || rel.status !== 'active') return { ok:false, msg:'Relationship not found.' };
+    const prev = c.relationshipStyle || 'monogamous';
+    if (prev === style) return { ok:false, msg:'Already in this arrangement.' };
+
+    // Check if partner is ok with it (based on bond level)
+    const partnerOk = rel.relationship >= 50 || style === 'monogamous';
+    if (!partnerOk) return { ok:false, msg:`${rel.name} isn't comfortable with that yet. Build more trust first (need 50+ bond).` };
+
+    c.relationshipStyle = style;
+    let msg = '';
+    if (style === 'open') {
+      State.addLog(c.age, `Opened the relationship with ${rel.name}.`, 'rel');
+      msg = `You & ${rel.name} agreed to an open relationship. 🔓`;
+    } else if (style === 'polyamorous') {
+      State.addLog(c.age, `You & ${rel.name} agreed to be polyamorous.`, 'rel');
+      msg = `You & ${rel.name} embraced polyamory. 💞`;
+    } else {
+      State.addLog(c.age, `Closed the relationship — just you & ${rel.name}.`, 'rel');
+      msg = `Back to being exclusive with ${rel.name}. 💑`;
+      c.relationshipStyle = 'monogamous';
+    }
+    State.saveGame();
+    return { ok:true, msg };
+  }
+
   // ── Cheating ──────────────────────────────────────────────────
   function cheatOnPartner() {
     const g = State.get(); const c = g.character;
@@ -2758,6 +2804,18 @@ const Engine = (() => {
     if (!partner) return { ok:false, msg:'No partner to cheat on.' };
     if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
     spendEnergy();
+
+    // Open / polyam: no risk, just fun
+    const relStyle = c.relationshipStyle || 'monogamous';
+    if (relStyle === 'open' || relStyle === 'polyamorous') {
+      const gen = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender==='male'?'female':'male');
+      const nm = DATA.randomName(gen);
+      State.applyEffects({ happiness:12 });
+      State.addLog(c.age, `Went on a date with ${nm.full} (open arrangement). 💞`, 'rel');
+      State.saveGame();
+      return { ok:true, caught:false, msg:`Went on a date with ${nm.full}. Your arrangement makes it totally fine! 💞` };
+    }
+
     const caughtChance = 0.35;
     const caught = Math.random() < caughtChance;
     const gen = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender==='male'?'female':'male');
@@ -3099,7 +3157,7 @@ const Engine = (() => {
     buyHouse, sellHouse, buyCar, sellCar, invest, casino,
     relationshipAction, planWedding, askFriendOut, planChild,
     doActivity, buyItem, goParty, useSubstance, seekRehab, childAction, SUBSTANCES,
-    startTherapy, stopTherapy, collegeAction, cheatOnPartner,
+    startTherapy, stopTherapy, collegeAction, cheatOnPartner, breakUpWith, setRelationshipStyle,
     launchStartup, STARTUP_TYPES, commitCrime, payBail, CRIMES,
     careForParent, writeWill, WILL_OPTIONS,
     SUBSCRIPTIONS, toggleSubscription,

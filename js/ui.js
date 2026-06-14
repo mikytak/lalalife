@@ -1111,7 +1111,8 @@ const UI = (() => {
     }
 
     // Meet a romantic interest (age 12+)
-    if (c.age >= 12 && c.sexuality !== 'asexual' && !State.getPartner()) {
+    const _currentRelStyle = c.relationshipStyle || 'monogamous';
+    if (c.age >= 12 && c.sexuality !== 'asexual' && (!State.getPartner() || _currentRelStyle === 'polyamorous')) {
       const romBtn = document.createElement('button');
       romBtn.className = 'btn btn-secondary btn-full mb-8';
       const romLabel = c.age < 18 ? 'Develop a Crush' : 'Meet Someone Romantically';
@@ -1125,8 +1126,8 @@ const UI = (() => {
       div.appendChild(romBtn);
     }
 
-    // Online dating (age 18+, no partner, not asexual)
-    if (c.age >= 18 && c.sexuality !== 'asexual' && !State.getPartner()) {
+    // Online dating (age 18+, no partner or polyam, not asexual)
+    if (c.age >= 18 && c.sexuality !== 'asexual' && (!State.getPartner() || _currentRelStyle === 'polyamorous')) {
       const dtBtn = document.createElement('button');
       dtBtn.className = 'btn btn-secondary btn-full mb-8';
       dtBtn.innerHTML = '📱 Dating App<br><small class="text-dim">Browse profiles and match · 1 energy</small>';
@@ -1232,7 +1233,7 @@ const UI = (() => {
             <div class="item-info">
               <div class="item-name">${rel.name} <span class="text-dim">(${rel.age})</span>${inCircle?'<span class="badge badge-accent" style="margin-left:4px">Circle</span>':''}${rel.isBestFriend?'<span class="badge badge-accent" style="margin-left:4px;background:gold;color:#000">⭐ BFF</span>':''}${rel.type==='enemy'?'<span class="badge-enemy">Enemy</span>':''}${rel.reachedOut?'<span class="badge badge-accent" style="margin-left:4px;background:var(--pink)">👋 Reached Out</span>':''}</div>
               <div class="item-sub">${ucFirst(rel.subtype)}${!active ? ' · ' + rel.status : ''}${rel.fame > 0 ? ` · ⭐ Famous (${rel.fame} fame)` : ''}</div>
-              ${loveLabel ? `<div style="font-size:.72rem;font-weight:700;color:${loveLabel.color};margin-top:2px">${loveLabel.text}</div>` : ''}
+              ${loveLabel ? `<div style="font-size:.72rem;font-weight:700;color:${loveLabel.color};margin-top:2px">${loveLabel.text}${isRomantic && active && (c.relationshipStyle==='open'||c.relationshipStyle==='polyamorous') ? ` · <span style="color:#c879e8">${c.relationshipStyle==='open'?'🔓 Open':'💞 Poly'}</span>` : ''}</div>` : ''}
             </div>
             <span class="text-dim" style="font-size:.78rem;font-weight:700">${rel.relationship}%</span>
           </div>
@@ -1271,7 +1272,9 @@ const UI = (() => {
       { id:'argue',      label:'Pick a Fight',          sub:'Damages the relationship · free',  energy:false },
     ];
 
-    if (rel.type === 'friend' && c.age >= 12 && c.sexuality !== 'asexual') {
+    const _hasPartner = State.get().relationships.some(r => r.type==='partner' && r.status==='active');
+    const _relStyle = c.relationshipStyle || 'monogamous';
+    if (rel.type === 'friend' && c.age >= 12 && c.sexuality !== 'asexual' && (!_hasPartner || _relStyle === 'polyamorous')) {
       actions.push({ id:'ask_out', label:'Ask Them Out', sub:`${rel.relationship >= 60 ? 'Good chance!' : 'Low chance...'} · 1 energy`, energy:true, askOut:true });
     }
     if (rel.type === 'friend' && rel.status === 'active') {
@@ -1294,7 +1297,33 @@ const UI = (() => {
       if (rel.subtype !== 'spouse' && !alreadySpouse) {
         actions.push({ id:'propose', label:'Propose', sub:'Need 60+ relationship, age 18+ · free', energy:false, disabled: rel.relationship < 60 || c.age < 18 });
       }
-      actions.push({ id:'_cheat', label:'Have an Affair', sub:'35% chance of getting caught · 1 energy', energy:true, isCheat:true });
+
+      // Relationship style options
+      const relStyle = c.relationshipStyle || 'monogamous';
+      if (rel.subtype !== 'spouse') {
+        if (relStyle === 'monogamous') {
+          actions.push({ id:'_open_rel', label:'Suggest Open Relationship', sub:'Both can see other people · free', energy:false, isOpenRel:true });
+          actions.push({ id:'_polyam',   label:'Suggest Polyamory',         sub:'Date multiple people openly · free', energy:false, isPolyam:true });
+        } else if (relStyle === 'open') {
+          actions.push({ id:'_close_rel', label:'Close the Relationship', sub:'Go back to exclusive · free', energy:false, isCloseRel:true });
+        } else if (relStyle === 'polyamorous') {
+          actions.push({ id:'_close_rel', label:'Return to Monogamy', sub:'One partner only · free', energy:false, isCloseRel:true });
+        }
+      }
+
+      // Cheat label depends on relationship style
+      const isOpen = relStyle === 'open' || relStyle === 'polyamorous';
+      if (!isOpen) {
+        actions.push({ id:'_cheat', label:'Have an Affair', sub:'35% chance of getting caught · 1 energy', energy:true, isCheat:true });
+      } else {
+        actions.push({ id:'_cheat', label:'See Someone Else', sub:'Open arrangement — no risk · 1 energy', energy:true, isCheat:true });
+      }
+
+      // Break up (non-spouse)
+      if (rel.subtype !== 'spouse') {
+        actions.push({ id:'_breakup', label:'💔 Break Up', sub:'End this relationship · free', energy:false, isBreakup:true });
+      }
+
       if (rel.subtype === 'spouse') {
         if (!rel.marriedWedding) {
           actions.push({ id:'plan_wedding', label:'Plan the Wedding', sub:'Choose a venue and celebrate · free', energy:false, isWedding:true });
@@ -1362,6 +1391,31 @@ const UI = (() => {
         btn.addEventListener('click', () => {
           closeModal('relaction');
           showPlanChildModal();
+        });
+      } else if (act.isBreakup) {
+        btn.addEventListener('click', () => {
+          if (!confirm(`Break up with ${rel.name}? 💔`)) return;
+          const r = Engine.breakUpWith(rel.id);
+          showToast(r.msg, 'bad');
+          closeModal('relaction'); updateDisplay(); renderRelationships();
+        });
+      } else if (act.isOpenRel) {
+        btn.addEventListener('click', () => {
+          const r = Engine.setRelationshipStyle(rel.id, 'open');
+          showToast(r.msg, r.ok ? 'good' : 'bad');
+          closeModal('relaction'); updateDisplay(); renderRelationships();
+        });
+      } else if (act.isPolyam) {
+        btn.addEventListener('click', () => {
+          const r = Engine.setRelationshipStyle(rel.id, 'polyamorous');
+          showToast(r.msg, r.ok ? 'good' : 'bad');
+          closeModal('relaction'); updateDisplay(); renderRelationships();
+        });
+      } else if (act.isCloseRel) {
+        btn.addEventListener('click', () => {
+          const r = Engine.setRelationshipStyle(rel.id, 'monogamous');
+          showToast(r.msg, r.ok ? 'good' : 'bad');
+          closeModal('relaction'); updateDisplay(); renderRelationships();
         });
       } else if (act.isCheat) {
         btn.addEventListener('click', () => {
