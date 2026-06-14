@@ -254,7 +254,7 @@ const UI = (() => {
     if (!el) return;
     const renderers = {
       activities: renderActivities, relationships: renderRelationships,
-      career: renderCareer, education: renderEducation,
+      hobbies: renderHobbies, career: renderCareer, education: renderEducation,
       assets: renderAssets, cheats: Cheats.render, log: renderLog,
     };
     if (renderers[name]) renderers[name]();
@@ -299,82 +299,12 @@ const UI = (() => {
       });
       div.appendChild(socialCard);
 
-      // Extracurriculars
-      const extHdr = document.createElement('div');
-      extHdr.className = 'section-title';
-      extHdr.textContent = 'Extracurriculars';
-      div.appendChild(extHdr);
-
-      const allExt = DATA.getAllExtracurriculars();
-      const myExtIds = new Set(c.extracurriculars.map(e => e.id));
-
-      // Current extracurriculars
-      c.extracurriculars.forEach(entry => {
-        const def = DATA.getExtracurricular(entry.id);
-        if (!def) return;
-        const hobbyMatch = c.hobbies.find(h => def.hobbyBoost.includes(h.id));
-        const card = document.createElement('div');
-        card.className = 'item-card';
-        card.innerHTML = `
-          <div class="item-top">
-            <div class="item-icon ${def.iconClass}">${def.icon}</div>
-            <div class="item-info">
-              <div class="item-name">${def.name}</div>
-              <div class="item-sub">${def.desc}</div>
-              <div class="hobby-skill-wrap">
-                <div class="hobby-skill-label"><span>Skill</span><span>${entry.skillLevel}/100</span></div>
-                <div class="hobby-skill-bar"><div class="hobby-skill-fill" style="width:${entry.skillLevel}%"></div></div>
-              </div>
-              ${hobbyMatch ? `<div class="item-detail text-accent">Boosted by ${DATA.getHobby(hobbyMatch.id)?.name} hobby</div>` : ''}
-            </div>
-          </div>
-          <div class="item-actions">
-            <button class="btn btn-primary btn-sm" data-participate="${entry.id}">Participate</button>
-          </div>`;
-        card.querySelector('[data-participate]').addEventListener('click', () => {
-          const r = Engine.participateExtracurricular(entry.id);
-          if (r.ok) {
-            const msg = r.hobbyBoost ? `${def.name} — skill ${r.skillLevel} (hobby bonus!)` : `${def.name} — skill ${r.skillLevel}`;
-            showToast(msg, 'good');
-            updateDisplay(); renderActivities();
-          }
-        });
-        div.appendChild(card);
-      });
-
-      // Available to join
-      const available = allExt.filter(e => !myExtIds.has(e.id) && c.age >= e.minAge && c.age <= e.maxAge);
-      if (available.length > 0) {
-        const joinHdr = document.createElement('div');
-        joinHdr.className = 'section-title';
-        joinHdr.style.marginTop = '2px';
-        joinHdr.textContent = 'Join an Extracurricular';
-        div.appendChild(joinHdr);
-
-        available.forEach(def => {
-          const hobbyMatch = c.hobbies.find(h => def.hobbyBoost.includes(h.id));
-          const boostCareers = def.careerBoost.length
-            ? `Boosts: ${def.careerBoost.map(id => DATA.getCareer(id)?.name || id).slice(0,2).join(', ')}`
-            : '';
-          const card = document.createElement('div');
-          card.className = 'item-card clickable';
-          card.innerHTML = `
-            <div class="item-top">
-              <div class="item-icon ${def.iconClass}">${def.icon}</div>
-              <div class="item-info">
-                <div class="item-name">${def.name}</div>
-                <div class="item-sub">${def.desc}</div>
-                ${hobbyMatch ? `<div class="item-detail text-accent">Your ${DATA.getHobby(hobbyMatch.id)?.name} hobby will give you a head start!</div>` : ''}
-                ${boostCareers ? `<div class="item-detail text-dim">${boostCareers}</div>` : ''}
-              </div>
-            </div>`;
-          card.addEventListener('click', () => {
-            const r = Engine.joinExtracurricular(def.id);
-            showToast(r.msg, r.ok ? 'good' : 'bad');
-            if (r.ok) { updateDisplay(); renderActivities(); }
-          });
-          div.appendChild(card);
-        });
+      // Extracurriculars shortcut → Education tab
+      { const extBtn = document.createElement('button'); extBtn.className = 'btn btn-secondary btn-full mb-8';
+        const extCount = c.extracurriculars.length;
+        extBtn.innerHTML = `🏃 Extracurriculars${extCount ? ` (${extCount} joined)` : ''}<br><small class="text-dim">Clubs, sports, and activities — see Education tab</small>`;
+        extBtn.addEventListener('click', () => { closeModal('activities'); openModal('education'); });
+        div.appendChild(extBtn);
       }
     }
 
@@ -821,137 +751,13 @@ const UI = (() => {
       });
     }
 
-    // Hobbies section
-    const hobbyHeader = document.createElement('div');
-    hobbyHeader.className = 'section-title';
-    hobbyHeader.textContent = 'Hobbies';
-    div.appendChild(hobbyHeader);
-
-    const allHobbies   = DATA.getAllHobbies();
-    const myHobbies    = c.hobbies;
-    const myHobbyIds   = new Set(myHobbies.map(h => h.id));
-
-    // Current hobbies — practice buttons
-    if (myHobbies.length === 0) {
-      const note = document.createElement('p');
-      note.className = 'text-dim mb-8';
-      note.style.fontSize = '.8rem';
-      note.textContent = 'No hobbies yet. Start one below — skills build over time and boost your artistic and physical careers.';
-      div.appendChild(note);
-    }
-
-    myHobbies.forEach(hEntry => {
-      const hDef = DATA.getHobby(hEntry.id);
-      if (!hDef) return;
-      const card = document.createElement('div');
-      card.className = 'item-card';
-      card.innerHTML = `
-        <div class="item-top">
-          <div class="item-icon ${hDef.iconClass}">${hDef.icon}</div>
-          <div class="item-info">
-            <div class="item-name">${hDef.name}</div>
-            <div class="item-sub">${hDef.desc}</div>
-            <div class="hobby-skill-wrap">
-              <div class="hobby-skill-label">
-                <span>Skill</span><span>${hEntry.skillLevel}/100</span>
-              </div>
-              <div class="hobby-skill-bar"><div class="hobby-skill-fill" style="width:${hEntry.skillLevel}%"></div></div>
-            </div>
-          </div>
-        </div>
-        <div class="item-actions">
-          <button class="btn btn-primary btn-sm" data-practice="${hEntry.id}">Practice</button>
-        </div>
-      `;
-      card.querySelector(`[data-practice]`).addEventListener('click', () => {
-        const result = Engine.practiceHobby(hEntry.id);
-        if (result.ok) {
-          showToast(`${hDef.name} practice — skill now ${result.skillLevel}!`, 'good');
-          updateDisplay();
-          renderActivities();
-        }
-      });
-      div.appendChild(card);
-    });
-
-    // Available hobbies to start
-    const availableHobbies = allHobbies.filter(h => !myHobbyIds.has(h.id) && c.age >= h.minAge);
-    if (availableHobbies.length > 0) {
-      const newHeader = document.createElement('div');
-      newHeader.className = 'section-title';
-      newHeader.style.marginTop = myHobbies.length ? '4px' : '0';
-      newHeader.textContent = 'Start a Hobby';
-      div.appendChild(newHeader);
-
-      availableHobbies.forEach(hDef => {
-        const boostLabel = hDef.careerBoost.length ? `Boosts: ${hDef.careerBoost.map(id=>DATA.getCareer(id)?.name||id).slice(0,3).join(', ')}` : '';
-        const card = document.createElement('div');
-        card.className = 'item-card clickable';
-        card.innerHTML = `
-          <div class="item-top">
-            <div class="item-icon ${hDef.iconClass}">${hDef.icon}</div>
-            <div class="item-info">
-              <div class="item-name">${hDef.name}</div>
-              <div class="item-sub">${hDef.desc}</div>
-              ${boostLabel ? `<div class="item-detail text-accent">${boostLabel}</div>` : ''}
-            </div>
-          </div>`;
-        card.addEventListener('click', () => {
-          const result = Engine.startHobby(hDef.id);
-          showToast(result.msg, result.ok ? 'good' : 'bad');
-          if (result.ok) { updateDisplay(); renderActivities(); }
-        });
-        div.appendChild(card);
-      });
-    }
-
-    // ── Style & Tattoos (age 16+) ─────────────────────────────
-    if (c.age >= 16) {
-      const styleHdr = document.createElement('div'); styleHdr.className = 'section-title';
-      styleHdr.textContent = `Style${c.tattoos > 0 ? ` · ${c.tattoos} tattoo${c.tattoos>1?'s':''}` : ''}`;
-      div.appendChild(styleHdr);
-
-      const currentStyle = DATA.STYLES.find(s => s.id === (c.style || 'casual'));
-      const styleCard = document.createElement('div'); styleCard.className = 'item-card';
-      styleCard.innerHTML = `
-        <div class="item-top">
-          <div class="item-icon ic-rose">St</div>
-          <div class="item-info">
-            <div class="item-name">Current: ${currentStyle?.name || 'Casual'}</div>
-            <div class="item-sub">${currentStyle?.desc || ''}</div>
-          </div>
-        </div>
-        <div class="item-actions" style="flex-wrap:wrap;gap:5px">
-          ${DATA.STYLES.map(s => `<button class="btn btn-xs ${s.id===c.style?'btn-success':'btn-ghost'}" data-style="${s.id}">${s.name}</button>`).join('')}
-        </div>`;
-      styleCard.querySelectorAll('[data-style]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const r = Engine.changeStyle(btn.dataset.style);
-          showToast(r.ok ? r.msg : r.msg, r.ok ? 'good' : 'bad');
-          if (r.ok) { updateDisplay(); renderActivities(); }
-        });
-      });
-      div.appendChild(styleCard);
-
-      if (c.age >= 18) {
-        const tatDesigns = ['geometric pattern','floral sleeve','meaningful quote','small minimalist','portrait','abstract art'];
-        const tatCard = document.createElement('div'); tatCard.className = 'item-card clickable';
-        tatCard.innerHTML = `
-          <div class="item-top">
-            <div class="item-icon ic-orange">Tt</div>
-            <div class="item-info">
-              <div class="item-name">Get a Tattoo</div>
-              <div class="item-sub">$100–$500 · +Looks, +Happiness</div>
-            </div>
-          </div>`;
-        tatCard.addEventListener('click', () => {
-          const design = DATA.randomFrom(tatDesigns);
-          const r = Engine.getTattoo(design);
-          showToast(r.ok ? r.msg : r.msg, r.ok ? 'good' : 'bad');
-          if (r.ok) { updateDisplay(); renderActivities(); }
-        });
-        div.appendChild(tatCard);
-      }
+    // Hobbies shortcut — moved to Hobbies tab
+    { const hHdr = document.createElement('div'); hHdr.className = 'section-title'; hHdr.textContent = 'Hobbies & Style'; div.appendChild(hHdr);
+      const hBtn = document.createElement('button'); hBtn.className = 'btn btn-secondary btn-full mb-8';
+      const hobbyCount = c.hobbies.length;
+      hBtn.innerHTML = `🎨 Hobbies${hobbyCount ? ` (${hobbyCount} active)` : ''}<br><small class="text-dim">Practice skills, change style, get tattoos</small>`;
+      hBtn.addEventListener('click', () => { closeModal('activities'); openModal('hobbies'); renderHobbies(); });
+      div.appendChild(hBtn);
     }
 
     // ── Health Conditions ──────────────────────────────────────
@@ -1042,6 +848,120 @@ const UI = (() => {
       }
       div.appendChild(card);
     });
+  }
+
+  function renderHobbies() {
+    const c = State.getChar();
+    const div = qs('#hobbies-content'); div.innerHTML = '';
+
+    // ── Active Hobbies ───────────────────────────────────────────
+    const allHobbies = DATA.getAllHobbies();
+    const myHobbies  = c.hobbies;
+    const myHobbyIds = new Set(myHobbies.map(h => h.id));
+    const hasE = Engine.hasEnergy();
+
+    const hobHdr = document.createElement('div'); hobHdr.className = 'section-title'; hobHdr.textContent = 'My Hobbies'; div.appendChild(hobHdr);
+    if (myHobbies.length === 0) {
+      const note = document.createElement('p'); note.className = 'text-dim mb-8'; note.style.fontSize = '.8rem';
+      note.textContent = 'No hobbies yet. Start one below — skills build over time and boost your artistic and physical careers.';
+      div.appendChild(note);
+    }
+    myHobbies.forEach(hEntry => {
+      const hDef = DATA.getHobby(hEntry.id); if (!hDef) return;
+      const card = document.createElement('div'); card.className = 'item-card';
+      card.innerHTML = `
+        <div class="item-top">
+          <div class="item-icon ${hDef.iconClass}">${hDef.icon}</div>
+          <div class="item-info">
+            <div class="item-name">${hDef.name}</div>
+            <div class="item-sub">${hDef.desc}</div>
+            <div class="hobby-skill-wrap">
+              <div class="hobby-skill-label"><span>Skill</span><span>${hEntry.skillLevel}/100</span></div>
+              <div class="hobby-skill-bar"><div class="hobby-skill-fill" style="width:${hEntry.skillLevel}%"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="item-actions">
+          <button class="btn btn-primary btn-sm" data-practice="${hEntry.id}" ${!hasE?'disabled':''}>Practice</button>
+        </div>`;
+      card.querySelector('[data-practice]')?.addEventListener('click', () => {
+        const r = Engine.practiceHobby(hEntry.id);
+        showToast(r.ok ? `${hDef.name} — skill now ${r.skillLevel}!` : r.msg, r.ok ? 'good' : 'bad');
+        if (r.ok) { updateDisplay(); renderHobbies(); }
+      });
+      div.appendChild(card);
+    });
+
+    // ── Start a Hobby ────────────────────────────────────────────
+    const available = allHobbies.filter(h => !myHobbyIds.has(h.id) && c.age >= h.minAge);
+    if (available.length > 0) {
+      const newHdr = document.createElement('div'); newHdr.className = 'section-title'; newHdr.textContent = 'Start a Hobby'; div.appendChild(newHdr);
+      available.forEach(hDef => {
+        const boostLabel = hDef.careerBoost.length ? `Boosts: ${hDef.careerBoost.map(id=>DATA.getCareer(id)?.name||id).slice(0,3).join(', ')}` : '';
+        const card = document.createElement('div'); card.className = 'item-card clickable';
+        card.innerHTML = `
+          <div class="item-top">
+            <div class="item-icon ${hDef.iconClass}">${hDef.icon}</div>
+            <div class="item-info">
+              <div class="item-name">${hDef.name}</div>
+              <div class="item-sub">${hDef.desc}</div>
+              ${boostLabel ? `<div class="item-detail text-accent">${boostLabel}</div>` : ''}
+            </div>
+          </div>`;
+        card.addEventListener('click', () => {
+          const r = Engine.startHobby(hDef.id);
+          showToast(r.msg, r.ok ? 'good' : 'bad');
+          if (r.ok) { updateDisplay(); renderHobbies(); }
+        });
+        div.appendChild(card);
+      });
+    }
+
+    // ── Style & Tattoos (age 16+) ────────────────────────────────
+    if (c.age >= 16) {
+      const styleHdr = document.createElement('div'); styleHdr.className = 'section-title';
+      styleHdr.textContent = `Style${c.tattoos > 0 ? ` · ${c.tattoos} tattoo${c.tattoos>1?'s':''}` : ''}`;
+      div.appendChild(styleHdr);
+      const currentStyle = DATA.STYLES.find(s => s.id === (c.style || 'casual'));
+      const styleCard = document.createElement('div'); styleCard.className = 'item-card';
+      styleCard.innerHTML = `
+        <div class="item-top">
+          <div class="item-icon ic-rose">St</div>
+          <div class="item-info">
+            <div class="item-name">Current: ${currentStyle?.name || 'Casual'}</div>
+            <div class="item-sub">${currentStyle?.desc || ''}</div>
+          </div>
+        </div>
+        <div class="item-actions" style="flex-wrap:wrap;gap:5px">
+          ${DATA.STYLES.map(s => `<button class="btn btn-xs ${s.id===c.style?'btn-success':'btn-ghost'}" data-style="${s.id}">${s.name}</button>`).join('')}
+        </div>`;
+      styleCard.querySelectorAll('[data-style]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const r = Engine.changeStyle(btn.dataset.style);
+          showToast(r.msg, r.ok ? 'good' : 'bad');
+          if (r.ok) { updateDisplay(); renderHobbies(); }
+        });
+      });
+      div.appendChild(styleCard);
+      if (c.age >= 18) {
+        const tatDesigns = ['geometric pattern','floral sleeve','meaningful quote','small minimalist','portrait','abstract art'];
+        const tatCard = document.createElement('div'); tatCard.className = 'item-card clickable';
+        tatCard.innerHTML = `
+          <div class="item-top">
+            <div class="item-icon ic-orange">Tt</div>
+            <div class="item-info">
+              <div class="item-name">Get a Tattoo</div>
+              <div class="item-sub">$100–$500 · +Looks, +Happiness</div>
+            </div>
+          </div>`;
+        tatCard.addEventListener('click', () => {
+          const r = Engine.getTattoo(DATA.randomFrom(tatDesigns));
+          showToast(r.msg, r.ok ? 'good' : 'bad');
+          if (r.ok) { updateDisplay(); renderHobbies(); }
+        });
+        div.appendChild(tatCard);
+      }
+    }
   }
 
   function showCasinoModal() {
@@ -1823,6 +1743,72 @@ const UI = (() => {
         div.appendChild(card);
       });
     }
+
+    // ── Extracurriculars (age 6–18) ───────────────────────────
+    if (c.age >= 6 && c.age <= 18) {
+      const extHdr = document.createElement('div'); extHdr.className = 'section-title'; extHdr.textContent = 'Extracurriculars'; div.appendChild(extHdr);
+      const allExt   = DATA.getAllExtracurriculars();
+      const myExtIds = new Set(c.extracurriculars.map(e => e.id));
+      const hasE2    = Engine.hasEnergy();
+
+      c.extracurriculars.forEach(entry => {
+        const def = DATA.getExtracurricular(entry.id); if (!def) return;
+        const hobbyMatch = c.hobbies.find(h => def.hobbyBoost.includes(h.id));
+        const card = document.createElement('div'); card.className = 'item-card';
+        card.innerHTML = `
+          <div class="item-top">
+            <div class="item-icon ${def.iconClass}">${def.icon}</div>
+            <div class="item-info">
+              <div class="item-name">${def.name}</div>
+              <div class="item-sub">${def.desc}</div>
+              <div class="hobby-skill-wrap">
+                <div class="hobby-skill-label"><span>Skill</span><span>${entry.skillLevel}/100</span></div>
+                <div class="hobby-skill-bar"><div class="hobby-skill-fill" style="width:${entry.skillLevel}%"></div></div>
+              </div>
+              ${hobbyMatch ? `<div class="item-detail text-accent">Boosted by ${DATA.getHobby(hobbyMatch.id)?.name} hobby</div>` : ''}
+            </div>
+          </div>
+          <div class="item-actions">
+            <button class="btn btn-primary btn-sm" data-participate="${entry.id}" ${!hasE2?'disabled':''}>Participate</button>
+          </div>`;
+        card.querySelector('[data-participate]')?.addEventListener('click', () => {
+          const r = Engine.participateExtracurricular(entry.id);
+          if (r.ok) { showToast(r.hobbyBoost ? `${def.name} — skill ${r.skillLevel} (hobby bonus!)` : `${def.name} — skill ${r.skillLevel}`, 'good'); updateDisplay(); renderEducation(); }
+        });
+        div.appendChild(card);
+      });
+
+      const availExt = allExt.filter(e => !myExtIds.has(e.id) && c.age >= e.minAge && c.age <= e.maxAge);
+      if (availExt.length > 0) {
+        const joinHdr = document.createElement('div'); joinHdr.className = 'section-title'; joinHdr.textContent = 'Join an Extracurricular'; div.appendChild(joinHdr);
+        availExt.forEach(def => {
+          const hobbyMatch = c.hobbies.find(h => def.hobbyBoost.includes(h.id));
+          const boostCareers = def.careerBoost.length ? `Boosts: ${def.careerBoost.map(id=>DATA.getCareer(id)?.name||id).slice(0,2).join(', ')}` : '';
+          const card = document.createElement('div'); card.className = 'item-card clickable';
+          card.innerHTML = `
+            <div class="item-top">
+              <div class="item-icon ${def.iconClass}">${def.icon}</div>
+              <div class="item-info">
+                <div class="item-name">${def.name}</div>
+                <div class="item-sub">${def.desc}</div>
+                ${hobbyMatch ? `<div class="item-detail text-accent">Your ${DATA.getHobby(hobbyMatch.id)?.name} hobby gives a head start!</div>` : ''}
+                ${boostCareers ? `<div class="item-detail text-dim">${boostCareers}</div>` : ''}
+              </div>
+            </div>`;
+          card.addEventListener('click', () => {
+            const r = Engine.joinExtracurricular(def.id);
+            showToast(r.msg, r.ok ? 'good' : 'bad');
+            if (r.ok) { updateDisplay(); renderEducation(); }
+          });
+          div.appendChild(card);
+        });
+      } else if (c.extracurriculars.length === 0) {
+        const note = document.createElement('p'); note.className = 'text-dim'; note.style.fontSize = '.8rem';
+        note.textContent = 'No extracurriculars available for your age yet.';
+        div.appendChild(note);
+      }
+    }
+
     const levelLabels = { none:'No formal education', elementary:'Elementary School', middleschool:'Middle School', highschool:'High School Diploma', tradeschool:'Trade School', some_college:'Some College', bachelor:"Bachelor's Degree", master:"Master's Degree", doctorate:'Doctorate' };
 
     const statusHdr = document.createElement('div'); statusHdr.className = 'section-title'; statusHdr.textContent = 'Current Education'; div.appendChild(statusHdr);
@@ -2581,7 +2567,7 @@ const UI = (() => {
   return {
     showScreen, updateDisplay, addFeedEntry, rebuildFeed,
     showEventModal, showToast, openModal, closeModal,
-    renderActivities, renderRelationships, renderCareer, renderEducation, renderAssets, renderLog,
+    renderActivities, renderRelationships, renderHobbies, renderCareer, renderEducation, renderAssets, renderLog,
     showDeathScreen, showCharacterPreview, populateCountrySelect,
     showLifeMoment, hideLifeMoment,
   };

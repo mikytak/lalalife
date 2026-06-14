@@ -16,13 +16,13 @@ const Engine = (() => {
 
   // ── Energy helpers ────────────────────────────────────────────
   function getEnergyMax(age) {
-    if (age < 6)  return 2;
-    if (age < 13) return 3;
-    if (age < 18) return 4;
-    if (age < 30) return 6;
-    if (age < 50) return 7;
-    if (age < 65) return 5;
-    return 4;
+    if (age < 6)  return 3;
+    if (age < 13) return 5;
+    if (age < 18) return 6;
+    if (age < 30) return 9;
+    if (age < 50) return 10;
+    if (age < 65) return 7;
+    return 6;
   }
 
   function hasEnergy(amount = 1) {
@@ -577,7 +577,8 @@ const Engine = (() => {
       if (choice.addPartner) { triggerMood('in_love', 3); }
       if (choice.addPartner) {
         const gen = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender === 'male' ? 'female' : 'male');
-        const nm  = DATA.randomName(gen);
+        const country_ap = DATA.COUNTRIES.find(co => co.name === c.country) || null;
+        const nm  = DATA.randomName(gen, country_ap);
         const rel = State.addRelationship({ name:nm.full, type:'partner', subtype:'partner', age:c.age+Math.floor(Math.random()*5)-2, relationship:70, traits:DATA.randomTraits(2), status:'active' });
         State.addLog(c.age, `Started dating ${rel.name}.`, 'rel');
         UI.showToast(`Now dating ${rel.name}!`, 'good');
@@ -594,7 +595,8 @@ const Engine = (() => {
       }
       if (choice.addCrush || event.addCrush) {
         const cg = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender === 'male' ? 'female' : 'male');
-        const cn = DATA.randomName(cg);
+        const country_cr = DATA.COUNTRIES.find(co => co.name === c.country) || null;
+        const cn = DATA.randomName(cg, country_cr);
         State.addRelationship({ name:cn.full, type:'friend', subtype:'crush', age:c.age, relationship:55, traits:DATA.randomTraits(2), status:'active' });
       }
       if (choice.retire) {
@@ -627,9 +629,22 @@ const Engine = (() => {
       // Condition events
       if (event.id === 'diagnosed_anxiety' && !c.conditions.includes('anxiety')) c.conditions.push('anxiety');
       if (event.id === 'back_injury' && !c.conditions.includes('back_pain')) c.conditions.push('back_pain');
+      // New sibling event — add them to relationships
+      if (event.id === 'baby_new_sibling') {
+        const country = DATA.COUNTRIES.find(co => co.name === c.country) || null;
+        const sibGen  = Math.random() < 0.5 ? 'female' : 'male';
+        const pool    = DATA.getCountryNamePool(country);
+        const sibFirst= DATA.randomFrom(sibGen === 'female' ? pool.female : pool.male);
+        const sibTitle= sibGen === 'female' ? 'Sister ' : 'Brother ';
+        const g2 = State.get();
+        const nameData = DATA.generateFamilyNames(country);
+        const rel = State.addRelationship({ name:`${sibTitle}${sibFirst} ${nameData.siblingSurname}`, type:'family', subtype:'sibling', age:0, relationship:65, traits:DATA.randomTraits(2), status:'active' });
+        State.addLog(c.age, `Your new sibling ${rel.name} was born! 👶`, 'rel');
+      }
       if (event.addFriend) {
         const fg  = Math.random() < 0.5 ? 'female' : 'male';
-        const fnm = DATA.randomName(fg);
+        const country2 = DATA.COUNTRIES.find(co => co.name === c.country) || null;
+        const fnm = DATA.randomName(fg, country2);
         const rel = State.addRelationship({ name:fnm.full, type:'friend', subtype:'friend', age:c.age, relationship:60, traits:DATA.randomTraits(2), status:'active' });
         State.addLog(c.age, event.log || `Made friends with ${rel.name}.`, 'event');
         return;
@@ -1137,7 +1152,8 @@ const Engine = (() => {
     if (c.sexuality === 'asexual') return { ok:false, msg:'Not really your thing.' };
     if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
     const gen = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender === 'male' ? 'female' : 'male');
-    const nm  = DATA.randomName(gen);
+    const country_fl = DATA.COUNTRIES.find(co => co.name === c.country) || null;
+    const nm  = DATA.randomName(gen, country_fl);
     const roll = Math.random();
     spendEnergy();
     if (roll < 0.55) {
@@ -1357,7 +1373,8 @@ const Engine = (() => {
     if (c.age < 6 || c.age > 18) return { ok:false, msg:'Only available during school years.' };
     if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
     const fg  = Math.random() < 0.5 ? 'female' : 'male';
-    const fnm = DATA.randomName(fg);
+    const country = DATA.COUNTRIES.find(co => co.name === c.country) || null;
+    const fnm = DATA.randomName(fg, country);
     const rel = State.addRelationship({ name:fnm.full, type:'friend', subtype:'friend', age:c.age + Math.floor(Math.random()*3)-1, relationship:55, traits:DATA.randomTraits(2), status:'active' });
     State.applyEffects({ happiness:6 });
     spendEnergy();
@@ -1375,7 +1392,8 @@ const Engine = (() => {
     if (alreadyHasPartner && relStyle !== 'polyamorous') return { ok:false, msg:'Already in a relationship.' };
     if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
     const gen = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender === 'male' ? 'female' : 'male');
-    const nm  = DATA.randomName(gen);
+    const country_r = DATA.COUNTRIES.find(co => co.name === c.country) || null;
+    const nm  = DATA.randomName(gen, country_r);
     const isTeen = c.age < 18;
     const rel = State.addRelationship({
       name:nm.full, type:'friend', subtype: isTeen ? 'crush' : 'partner',
