@@ -1822,8 +1822,7 @@ const Engine = (() => {
     if (c.age < 18) return { ok:false, msg:'Must be 18+ for Raya.' };
     if (c.sexuality === 'asexual') return { ok:false, msg:'Not really your thing.' };
     if ((c.fame || 0) < RAYA_FAME_MIN) return { ok:false, msg:`You need at least ${RAYA_FAME_MIN} fame to join Raya. Keep building your profile.` };
-    const _rayaRelStyle = State.getChar().relationshipStyle || 'monogamous';
-    if (State.getPartner() && _rayaRelStyle !== 'polyamorous') return { ok:false, msg:'Already in a relationship.' };
+    // No partner block — let anyone browse
     if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
     // 3 Raya profiles — mix of famous and royal
     const profiles = [generateRayaProfile(c), generateRayaProfile(c), generateRayaProfile(c)];
@@ -1833,8 +1832,8 @@ const Engine = (() => {
   function connectWithMatch(profile) {
     const c = State.getChar();
     const alreadyHasPartner = State.getPartner();
-    const _connectRelStyle = State.getChar().relationshipStyle || 'monogamous';
-    if (alreadyHasPartner && _connectRelStyle !== 'polyamorous') return { ok:false, msg:'Already in a relationship.' };
+    const _connectRelStyle = c.relationshipStyle || 'monogamous';
+    // Allow connecting even if in a relationship — it's sneaky unless open/poly
     // Raya profiles are harder to match — they weight your fame heavily
     let successChance;
     if (profile.isRaya) {

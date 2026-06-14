@@ -1032,7 +1032,7 @@ const UI = (() => {
 
     // Meet a romantic interest (age 12+)
     const _currentRelStyle = c.relationshipStyle || 'monogamous';
-    if (c.age >= 12 && c.sexuality !== 'asexual' && (!State.getPartner() || _currentRelStyle === 'polyamorous')) {
+    if (c.age >= 12 && c.sexuality !== 'asexual') {
       const romBtn = document.createElement('button');
       romBtn.className = 'btn btn-secondary btn-full mb-8';
       const romLabel = c.age < 18 ? 'Develop a Crush' : 'Meet Someone Romantically';
@@ -1046,8 +1046,8 @@ const UI = (() => {
       div.appendChild(romBtn);
     }
 
-    // Online dating (age 18+, no partner or polyam, not asexual)
-    if (c.age >= 18 && c.sexuality !== 'asexual' && (!State.getPartner() || _currentRelStyle === 'polyamorous')) {
+    // Online dating (age 18+, not asexual — always visible)
+    if (c.age >= 18 && c.sexuality !== 'asexual') {
       const dtBtn = document.createElement('button');
       dtBtn.className = 'btn btn-secondary btn-full mb-8';
       dtBtn.innerHTML = '📱 Dating App<br><small class="text-dim">Browse profiles and match · 1 energy</small>';
@@ -1129,7 +1129,8 @@ const UI = (() => {
       rels.forEach(rel => {
         const active = rel.status === 'active';
         const card = document.createElement('div');
-        card.className = `item-card${active ? ' clickable' : ' rel-dead'}`;
+        const isEx = rel.type === 'ex';
+        card.className = `item-card${(active || isEx) ? ' clickable' : ' rel-dead'}`;
         const iconMap = { father:'Fa', mother:'Mo', sibling:'Si', child:'Ch', friend:'Fr', crush:'Cr', partner:'Pa', spouse:'Sp', ex:'Ex', professor:'Pr' };
         const icon = iconMap[rel.subtype] || '??';
         const inCircle = c.socialCircle.includes(rel.id);
@@ -1166,7 +1167,7 @@ const UI = (() => {
           else { const r = Engine.addToCircle(rel.id); showToast(r.msg, r.ok?'good':'bad'); }
           renderRelationships();
         });
-        if (active) {
+        if (active || isEx) {
           if ((rel.subtype === 'father' || rel.subtype === 'mother') && rel.age >= 70) {
             card.addEventListener('click', () => showParentCareModal(rel));
           } else {
