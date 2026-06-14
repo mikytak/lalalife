@@ -19,7 +19,8 @@ const UI = (() => {
     if (!g) return;
     const c = g.character;
 
-    qs('#hdr-name').textContent = `${c.firstName} ${c.lastName}`;
+    const hdrTitle = c.royalTitle ? `${c.royalTitle} ` : '';
+    qs('#hdr-name').textContent = `${hdrTitle}${c.firstName} ${c.lastName}`;
     const moodTxt = c.mood ? ` · ${c.mood.name}` : '';
     qs('#hdr-age').textContent  = `Age ${c.age} · ${c.country}${moodTxt}`;
     // Mood color on age line
@@ -1128,15 +1129,38 @@ const UI = (() => {
     if (c.age >= 18 && c.sexuality !== 'asexual' && !State.getPartner()) {
       const dtBtn = document.createElement('button');
       dtBtn.className = 'btn btn-secondary btn-full mb-8';
-      dtBtn.innerHTML = 'Browse Dating Apps<br><small class="text-dim">Browse profiles and match · 1 energy</small>';
+      dtBtn.innerHTML = '📱 Dating App<br><small class="text-dim">Browse profiles and match · 1 energy</small>';
       dtBtn.disabled = !Engine.hasEnergy();
       dtBtn.addEventListener('click', () => {
         const r = Engine.browseOnlineDating();
         if (!r.ok) { showToast(r.msg, 'bad'); return; }
         closeModal('relationships');
-        showOnlineDatingModal(r.profiles);
+        showOnlineDatingModal(r.profiles, false);
       });
       div.appendChild(dtBtn);
+
+      // Raya — exclusive app unlocked at 30+ fame
+      const fame = c.fame || 0;
+      const rayaFameMin = Engine.RAYA_FAME_MIN || 30;
+      const rayaUnlocked = fame >= rayaFameMin;
+      const rayaBtn = document.createElement('button');
+      rayaBtn.className = 'btn btn-full mb-8';
+      rayaBtn.style.cssText = rayaUnlocked
+        ? 'background:linear-gradient(135deg,#1a1a2e,#16213e);color:#e2c96e;border:1.5px solid #e2c96e;font-weight:700'
+        : 'background:#f0ede8;color:#bbb;border:1.5px solid #ddd';
+      rayaBtn.innerHTML = rayaUnlocked
+        ? `✦ Raya<br><small style="color:#c9a84c;font-weight:400">Exclusive · famous &amp; royals · 1 energy</small>`
+        : `✦ Raya <span style="font-size:.7rem;opacity:.7">(${rayaFameMin} fame required — you have ${fame})</span><br><small style="font-size:.7rem">Build your fame to unlock</small>`;
+      rayaBtn.disabled = !rayaUnlocked || !Engine.hasEnergy();
+      if (rayaUnlocked) {
+        rayaBtn.addEventListener('click', () => {
+          const r = Engine.browseRaya();
+          if (!r.ok) { showToast(r.msg, 'bad'); return; }
+          closeModal('relationships');
+          showOnlineDatingModal(r.profiles, true);
+        });
+      }
+      div.appendChild(rayaBtn);
     }
 
     // Social Circle
@@ -1207,7 +1231,7 @@ const UI = (() => {
             <div class="item-icon ic-rose">${icon}</div>
             <div class="item-info">
               <div class="item-name">${rel.name} <span class="text-dim">(${rel.age})</span>${inCircle?'<span class="badge badge-accent" style="margin-left:4px">Circle</span>':''}${rel.isBestFriend?'<span class="badge badge-accent" style="margin-left:4px;background:gold;color:#000">⭐ BFF</span>':''}${rel.type==='enemy'?'<span class="badge-enemy">Enemy</span>':''}${rel.reachedOut?'<span class="badge badge-accent" style="margin-left:4px;background:var(--pink)">👋 Reached Out</span>':''}</div>
-              <div class="item-sub">${ucFirst(rel.subtype)}${!active ? ' · ' + rel.status : ''}</div>
+              <div class="item-sub">${ucFirst(rel.subtype)}${!active ? ' · ' + rel.status : ''}${rel.fame > 0 ? ` · ⭐ Famous (${rel.fame} fame)` : ''}</div>
               ${loveLabel ? `<div style="font-size:.72rem;font-weight:700;color:${loveLabel.color};margin-top:2px">${loveLabel.text}</div>` : ''}
             </div>
             <span class="text-dim" style="font-size:.78rem;font-weight:700">${rel.relationship}%</span>
@@ -1537,6 +1561,100 @@ const UI = (() => {
       else { div.appendChild(makeEmpty('?', 'Unemployed. Browse the job board below.')); }
     }
 
+    // ── My Work (creative careers) ──────────────────────────────
+    if (c.career.jobId && !c.career.retired) {
+      const projEntry = Engine.getProjectableDef(c.career.jobId);
+      if (projEntry) {
+        const [pType, pDef] = projEntry;
+        const myProjects = (c.projects || []).filter(p => DATA.CREATIVE_PROJECT_DEFS[p.type]?.careers.includes(c.career.jobId));
+        const totalRoyalties = myProjects.reduce((s, p) => s + (p.royaltiesPerYear || 0), 0);
+
+        const wHdr = document.createElement('div'); wHdr.className = 'section-title';
+        wHdr.innerHTML = `My Work <span style="color:var(--green);font-size:.75rem;font-weight:600">${totalRoyalties > 0 ? DATA.fmtMoney(totalRoyalties) + '/yr royalties' : ''}</span>`;
+        div.appendChild(wHdr);
+
+        // Create button — can create multiple types if career supports them
+        const allApplicable = Object.entries(DATA.CREATIVE_PROJECT_DEFS).filter(([, d]) => d.careers.includes(c.career.jobId));
+        allApplicable.forEach(([type, def]) => {
+          const createBtn = document.createElement('button');
+          createBtn.className = 'btn btn-primary btn-full mb-8';
+          createBtn.innerHTML = `${def.emoji} ${def.label}<br><small class="text-dim">2 energy · gains fame &amp; royalties</small>`;
+          createBtn.disabled = !Engine.hasEnergy(2);
+          createBtn.addEventListener('click', () => showProjectCreateModal(type));
+          div.appendChild(createBtn);
+        });
+
+        // Published works list
+        const allProjects = (c.projects || []).slice().reverse();
+        if (!allProjects.length) {
+          div.appendChild(makeEmpty('📄', 'No works published yet. Create your first!'));
+        } else {
+          allProjects.forEach(p => {
+            const pDef2 = DATA.CREATIVE_PROJECT_DEFS[p.type];
+            const recPct = p.reception;
+            const recBar = recPct >= 85 ? '🔥' : recPct >= 70 ? '⭐' : recPct >= 50 ? '👍' : '😐';
+            const recColor = recPct >= 70 ? 'var(--green)' : recPct >= 45 ? 'var(--yellow)' : 'var(--red)';
+            const card = document.createElement('div'); card.className = 'item-card';
+            card.innerHTML = `
+              <div class="item-top">
+                <div class="item-icon ic-purple" style="font-size:1.4rem;background:none;width:36px">${pDef2?.emoji || '📄'}</div>
+                <div class="item-info">
+                  <div class="item-name" style="font-style:italic">"${p.title}"</div>
+                  <div class="item-sub">${p.genre} · ${ucFirst(p.scopeLabel || p.scope)} · Age ${p.createdAge}</div>
+                  <div class="item-detail">
+                    ${recBar} <span style="color:${recColor};font-weight:700">${recPct}/100</span>
+                    ${pDef2 ? ' · ' + (pDef2.receptionDesc[Math.min(4,Math.floor(recPct/20))] || '') : ''}
+                  </div>
+                  <div class="item-detail text-green">${DATA.fmtMoney(p.royaltiesPerYear)}/yr · ${DATA.fmtMoney(p.totalEarned||0)} total</div>
+                </div>
+              </div>`;
+            div.appendChild(card);
+          });
+        }
+      }
+
+      // ── Sports season (sports careers) ─────────────────────────
+      const career2 = DATA.getCareer(c.career.jobId);
+      if (career2?.category === 'sports') {
+        const sportKey = career2.sportKey;
+        const sportDef = DATA.SPORT_DEFS?.[sportKey];
+        if (sportDef) {
+          const rec = c.sportRecord;
+          const sHdr = document.createElement('div'); sHdr.className = 'section-title';
+          sHdr.innerHTML = `${sportDef.icon} Season Record <span style="font-size:.75rem;color:var(--text-muted)">${rec ? rec.careerWins + 'W–' + rec.careerLosses + 'L career' : 'No seasons played'}</span>`;
+          div.appendChild(sHdr);
+
+          const seasonBtn = document.createElement('button');
+          seasonBtn.className = 'btn btn-primary btn-full mb-8';
+          seasonBtn.innerHTML = `${sportDef.icon} Play a Season<br><small class="text-dim">Simulate ${sportDef.gamesPerSeason} games · 2 energy</small>`;
+          seasonBtn.disabled = !Engine.hasEnergy(2);
+          seasonBtn.addEventListener('click', () => {
+            const r = Engine.playSeason();
+            if (!r.ok) { showToast(r.msg, 'bad'); return; }
+            showSeasonResultModal(r);
+            updateDisplay(); renderCareer();
+          });
+          div.appendChild(seasonBtn);
+
+          if (rec?.titles?.length) {
+            const tCard = document.createElement('div'); tCard.className = 'item-card';
+            tCard.innerHTML = `<div class="item-name">🏆 Career Titles</div><div class="item-sub" style="margin-top:4px">${rec.titles.map(t=>`<span style="background:var(--accent-light);padding:2px 8px;border-radius:12px;margin-right:4px;font-size:.78rem">${t}</span>`).join('')}</div>`;
+            div.appendChild(tCard);
+          }
+
+          if (rec?.seasons?.length) {
+            rec.seasons.slice(-5).reverse().forEach(s => {
+              const sCard = document.createElement('div'); sCard.className = 'item-card';
+              const ratio = s.wins / (s.wins + s.losses);
+              const col   = ratio >= 0.6 ? 'var(--green)' : ratio >= 0.45 ? 'var(--yellow)' : 'var(--red)';
+              sCard.innerHTML = `<div class="item-sub">Age ${s.age}: <b style="color:${col}">${s.wins}W–${s.losses}L</b>${s.titles?.length ? ' · 🏆 ' + s.titles.join(', ') : ''}</div>`;
+              div.appendChild(sCard);
+            });
+          }
+        }
+      }
+    }
+
     // Hobby + extracurricular bonuses summary
     if (c.hobbies.length > 0 || c.extracurriculars.length > 0) {
       const hbHdr = document.createElement('div'); hbHdr.className = 'section-title'; hbHdr.textContent = 'Career Bonuses'; div.appendChild(hbHdr);
@@ -1560,7 +1678,8 @@ const UI = (() => {
       { id:'entry', label:'Entry Level' }, { id:'trade', label:'Trade & Vocational' },
       { id:'business', label:'Business & Finance' }, { id:'professional', label:'Professional' },
       { id:'medical', label:'Medical' }, { id:'legal', label:'Legal' },
-      { id:'education', label:'Education' }, { id:'tech', label:'Technology' }, { id:'artistic', label:'Arts & Creative' },
+      { id:'education', label:'Education' }, { id:'tech', label:'Technology' },
+      { id:'artistic', label:'Arts & Creative' }, { id:'sports', label:'⚽ Sports & Athletics' },
     ];
 
     cats.forEach(cat => {
@@ -1976,33 +2095,55 @@ const UI = (() => {
   }
 
   // ── Online Dating modal ───────────────────────────────────────
-  function showOnlineDatingModal(profiles) {
-    let idx = 0;
+  function showOnlineDatingModal(profiles, isRaya = false) {
     function showProfile(i) {
-      if (i >= profiles.length) {
-        openModal('relationships');
-        return;
-      }
+      if (i >= profiles.length) { openModal('relationships'); return; }
       const p = profiles[i];
       const overlay = qs('#modal-event');
-      qs('#evt-category').textContent = 'Dating Apps';
-      qs('#evt-category').className = 'evt-category cat-social';
-      qs('#evt-title').textContent = `${p.name}, ${p.age}`;
-      qs('#evt-desc').textContent = `"${p.bio}" · Interests: ${p.interests.join(', ')} · Compatibility: ${p.compatibility}%`;
+
+      if (isRaya) {
+        qs('#evt-category').textContent = '✦ Raya';
+        qs('#evt-category').className   = 'evt-category cat-family';
+        qs('#evt-category').style.cssText = 'background:linear-gradient(135deg,#1a1a2e,#16213e);color:#e2c96e;border-color:#e2c96e';
+      } else {
+        qs('#evt-category').textContent   = '📱 Dating App';
+        qs('#evt-category').className     = 'evt-category cat-social';
+        qs('#evt-category').style.cssText = '';
+      }
+
+      // Profile header
+      const badge = p.isRoyal
+        ? `<span style="background:#e2c96e;color:#1a1a2e;padding:2px 8px;border-radius:10px;font-size:.72rem;font-weight:800;margin-left:6px">👑 Royalty</span>`
+        : p.isRaya
+        ? `<span style="background:#a78bfa;color:#fff;padding:2px 8px;border-radius:10px;font-size:.72rem;font-weight:800;margin-left:6px">⭐ ${ucFirst(p.career || 'Famous')}</span>`
+        : '';
+      qs('#evt-title').innerHTML = `${p.name}, ${p.age}${badge}`;
+
+      const fameLine  = p.fame ? `Fame ${p.fame} · ` : '';
+      const careerLine = p.isRoyal ? `${p.royalTitle} of ${p.royalCountry} · ` : p.career ? `${ucFirst(p.career)} · ` : '';
+      const compColor = p.compatibility >= 60 ? 'var(--green)' : p.compatibility >= 40 ? 'var(--yellow)' : 'var(--red)';
+      qs('#evt-desc').innerHTML =
+        `<em>"${p.bio}"</em><br><small style="opacity:.8">${fameLine}${careerLine}Vibe match: <span style="color:${compColor};font-weight:700">${p.compatibility}%</span></small>`;
+
       const choicesDiv = qs('#evt-choices'); choicesDiv.innerHTML = '';
-      const connectBtn = document.createElement('button'); connectBtn.className = 'evt-choice';
-      connectBtn.textContent = 'Connect';
+
+      const connectBtn = document.createElement('button');
+      connectBtn.className = 'evt-choice';
+      connectBtn.textContent = isRaya ? (p.isRoyal ? '👑 Request connection' : '⭐ Connect') : 'Connect';
       connectBtn.addEventListener('click', () => {
         overlay.classList.add('hidden');
         const r = Engine.connectWithMatch(p);
         showToast(r.msg, r.matched ? 'good' : 'info');
         updateDisplay();
-        if (!r.matched && i + 1 < profiles.length) showProfile(i + 1);
-        else openModal('relationships');
+        if (r.matched || i + 1 >= profiles.length) openModal('relationships');
+        else showProfile(i + 1);
       });
-      const passBtn = document.createElement('button'); passBtn.className = 'evt-choice';
-      passBtn.textContent = `Pass${i+1 < profiles.length ? ' · See next' : ''}`;
+
+      const passBtn = document.createElement('button');
+      passBtn.className = 'evt-choice';
+      passBtn.textContent = `Pass${i + 1 < profiles.length ? ' · Next profile' : ''}`;
       passBtn.addEventListener('click', () => { overlay.classList.add('hidden'); showProfile(i + 1); });
+
       choicesDiv.append(connectBtn, passBtn);
       overlay.classList.remove('hidden');
     }
@@ -2164,6 +2305,149 @@ const UI = (() => {
     showScreen('death');
   }
 
+  // ── Life Moment Cards ─────────────────────────────────────────
+  // Cute polaroid-style popup for big life events
+  const MOMENT_THEMES = {
+    marry:       { bg:'linear-gradient(135deg,#f472b6,#ec4899)', sparkles:['💍','✨','💖','🌸'] },
+    baby:        { bg:'linear-gradient(135deg,#fbbf24,#f59e0b)', sparkles:['👶','🍼','⭐','🌟'] },
+    graduate:    { bg:'linear-gradient(135deg,#34d399,#10b981)', sparkles:['🎓','✨','📚','🌟'] },
+    retire:      { bg:'linear-gradient(135deg,#a78bfa,#7c3aed)', sparkles:['🌅','🎉','🌟','💫'] },
+    career:      { bg:'linear-gradient(135deg,#f59e0b,#d97706)', sparkles:['🏆','⭐','🌟','💫'] },
+    love:        { bg:'linear-gradient(135deg,#fb7185,#f43f5e)', sparkles:['💕','✨','🌸','💫'] },
+    grandparent: { bg:'linear-gradient(135deg,#c084fc,#a855f7)', sparkles:['🥰','💜','🌟','⭐'] },
+    royal:       { bg:'linear-gradient(135deg,#fbbf24,#92400e)', sparkles:['👑','✨','💎','🌟'] },
+    nepo:        { bg:'linear-gradient(135deg,#60a5fa,#3b82f6)', sparkles:['⭐','🎬','💫','✨'] },
+    drive:       { bg:'linear-gradient(135deg,#4ade80,#16a34a)', sparkles:['🚗','🛣️','🎉','✨'] },
+    home:        { bg:'linear-gradient(135deg,#fb923c,#ea580c)', sparkles:['🏠','✨','🌟','💫'] },
+    default:     { bg:'linear-gradient(135deg,#818cf8,#6366f1)', sparkles:['✨','🌟','💫','⭐'] },
+  };
+
+  let _momentTimeout = null;
+  let _momentOverlay = null;
+
+  function showLifeMoment(emoji, title, sub, theme = 'default') {
+    if (!_momentOverlay) {
+      _momentOverlay = document.createElement('div');
+      _momentOverlay.id = 'life-moment-overlay';
+      _momentOverlay.addEventListener('click', hideLifeMoment);
+      document.body.appendChild(_momentOverlay);
+    }
+    const t = MOMENT_THEMES[theme] || MOMENT_THEMES.default;
+    const [s1, s2, s3, s4] = t.sparkles;
+    _momentOverlay.innerHTML = `
+      <div class="life-moment-card" style="background:${t.bg}">
+        <div class="lm-tape"></div>
+        <span class="lm-sparkle tl">${s1}</span>
+        <span class="lm-sparkle tr">${s2}</span>
+        <span class="lm-emoji">${emoji}</span>
+        <div class="lm-title">${title}</div>
+        <div class="lm-sub">${sub}</div>
+        <span class="lm-sparkle bl">${s3}</span>
+        <span class="lm-sparkle br">${s4}</span>
+        <div class="lm-tap">tap to continue</div>
+      </div>`;
+    _momentOverlay.classList.add('lm-visible');
+    clearTimeout(_momentTimeout);
+    _momentTimeout = setTimeout(hideLifeMoment, 3200);
+  }
+
+  function hideLifeMoment() {
+    if (!_momentOverlay) return;
+    _momentOverlay.classList.remove('lm-visible');
+  }
+
+  // ── Project Create Modal ──────────────────────────────────────
+  function showProjectCreateModal(type) {
+    const def = DATA.CREATIVE_PROJECT_DEFS[type];
+    if (!def) return;
+    const overlay = qs('#modal-project-create');
+    const titleEl  = qs('#projcreate-title');
+    const contentEl = qs('#projcreate-content');
+    titleEl.textContent = def.label;
+
+    let selGenre = def.genres[0];
+    let selScope = def.scopes[0].id;
+    let projTitle = DATA.randomProjectTitle(type);
+
+    function render() {
+      contentEl.innerHTML = `
+        <div class="form-group">
+          <label>Title</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="form-input" id="proj-title-inp" type="text" value="${projTitle}" style="flex:1;font-style:italic">
+            <button class="btn btn-ghost btn-sm" id="btn-proj-rand" style="white-space:nowrap;padding:8px 10px">🎲</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Genre</label>
+          <div class="genre-pills">
+            ${def.genres.map(g=>`<button class="pill${selGenre===g?' pill-active':''}" data-g="${g}">${g}</button>`).join('')}
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Scale / Scope</label>
+          <div class="gender-row">
+            ${def.scopes.map(s=>`<button class="gender-btn${selScope===s.id?' active':''}" data-sc="${s.id}">${s.label}</button>`).join('')}
+          </div>
+        </div>
+        <div style="background:var(--accent-light);border-radius:12px;padding:12px 14px;margin:12px 0;font-size:.82rem;color:var(--text-muted)">
+          💡 Reception depends on your stats, hobby skill, and career level. Bigger scope = bigger royalties if it lands well.
+        </div>
+        <button class="btn btn-primary btn-lg btn-full" id="btn-do-publish">${def.emoji} Publish — 2 energy</button>
+      `;
+      contentEl.querySelector('#btn-proj-rand').onclick = () => {
+        projTitle = DATA.randomProjectTitle(type);
+        contentEl.querySelector('#proj-title-inp').value = projTitle;
+      };
+      contentEl.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { selGenre = b.dataset.g; render(); });
+      contentEl.querySelectorAll('[data-sc]').forEach(b => b.onclick = () => { selScope = b.dataset.sc; render(); });
+      contentEl.querySelector('#btn-do-publish').onclick = () => {
+        const title = (contentEl.querySelector('#proj-title-inp').value.trim()) || projTitle;
+        const r = Engine.createProject(type, title, selGenre, selScope);
+        if (!r.ok) { showToast(r.msg, 'bad'); return; }
+        overlay.classList.add('hidden');
+        // Reception result
+        const recPct = r.project.reception;
+        const recDesc = r.recDesc;
+        const recEmoji = recPct >= 85 ? '🔥' : recPct >= 70 ? '⭐' : recPct >= 50 ? '👍' : '😐';
+        showToast(`"${title}" — ${recDesc}! ${recEmoji} (${recPct}/100) +${DATA.fmtMoney(r.initialSale)}`, recPct >= 55 ? 'good' : 'info');
+        if (recPct >= 78) showLifeMoment(def.emoji, `"${title.slice(0,22)}"`, `${recDesc}! ${recPct}/100 reception 🔥`, 'career');
+        updateDisplay(); openModal('career'); renderCareer();
+      };
+    }
+    render();
+    overlay.classList.remove('hidden');
+    qs('#modal-project-create .close-btn')?.addEventListener('click', () => overlay.classList.add('hidden'), { once:true });
+  }
+
+  // ── Season Result Modal ───────────────────────────────────────
+  function showSeasonResultModal(r) {
+    const overlay = qs('#modal-event');
+    const { wins, losses, titlesWon, famGain, moneyBonus, sportDef, games } = r;
+    const ratio = wins / games;
+    const emoji = ratio >= 0.65 ? '🏆' : ratio >= 0.5 ? '⭐' : ratio >= 0.4 ? '😤' : '😓';
+    const headline = titlesWon.length
+      ? titlesWon[0] + ' Champion!'
+      : ratio >= 0.65 ? 'Great Season!' : ratio >= 0.5 ? 'Solid Season' : ratio < 0.35 ? 'Tough Year...' : 'Decent Season';
+
+    qs('#evt-category').textContent = `${sportDef.icon} ${sportDef.label} Season`;
+    qs('#evt-category').className   = 'evt-category cat-career';
+    qs('#evt-category').style.cssText = '';
+    qs('#evt-title').innerHTML = `${emoji} ${headline}`;
+    qs('#evt-desc').innerHTML  = `
+      <div style="font-size:1.4rem;font-weight:800;margin:8px 0">${wins}W &nbsp;–&nbsp; ${losses}L</div>
+      ${titlesWon.length ? `<div style="color:var(--green);font-weight:700;margin:4px 0">🏆 ${titlesWon.join(' · ')}</div>` : ''}
+      <div style="font-size:.82rem;color:var(--text-muted);margin-top:6px">
+        +${famGain} Fame · +${DATA.fmtMoney(moneyBonus)}
+      </div>`;
+    const choicesDiv = qs('#evt-choices'); choicesDiv.innerHTML = '';
+    const okBtn = document.createElement('button'); okBtn.className = 'evt-choice';
+    okBtn.textContent = 'Onwards ✊';
+    okBtn.addEventListener('click', () => { overlay.classList.add('hidden'); });
+    choicesDiv.appendChild(okBtn);
+    overlay.classList.remove('hidden');
+  }
+
   // ── Character preview ─────────────────────────────────────────
   function showCharacterPreview({ characterData, relationships }) {
     const c  = characterData;
@@ -2171,11 +2455,13 @@ const UI = (() => {
     const parents   = relationships.filter(r => r.subtype==='father'||r.subtype==='mother');
     const siblings  = relationships.filter(r => r.subtype==='sibling');
 
-    qs('#preview-name').textContent = `${c.firstName} ${c.lastName}`;
+    const titlePrefix = c.royalTitle ? `${c.royalTitle} ` : '';
+    qs('#preview-name').textContent = `${titlePrefix}${c.firstName} ${c.lastName}`;
     const sexLabel = c.sexualityKnown && c.sexuality !== 'straight'
       ? ` · ${DATA.SEXUALITIES.find(s=>s.id===c.sexuality)?.label || ''}`
       : '';
-    qs('#preview-meta').textContent = `${ucFirst(c.gender)} · ${c.country} · ${wc?.label||c.wealthClass}${sexLabel}`;
+    const birthBadge = c.isRoyal ? ' 👑 Royalty' : c.isNepobaby ? ' ⭐ Nepobaby' : '';
+    qs('#preview-meta').textContent = `${ucFirst(c.gender)} · ${c.country} · ${wc?.label||c.wealthClass}${birthBadge}${sexLabel}`;
     qs('#preview-stats').innerHTML = [
       { label:'Health',    val:c.health,    color:'var(--health)' },
       { label:'Happiness', val:c.happiness, color:'var(--happiness)' },
@@ -2237,5 +2523,6 @@ const UI = (() => {
     showEventModal, showToast, openModal, closeModal,
     renderActivities, renderRelationships, renderCareer, renderEducation, renderAssets, renderLog,
     showDeathScreen, showCharacterPreview, populateCountrySelect,
+    showLifeMoment, hideLifeMoment,
   };
 })();

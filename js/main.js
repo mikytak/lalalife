@@ -10,6 +10,7 @@ const Game = (() => {
   function init() {
     UI.populateCountrySelect();
     wireGenderButtons();
+    wireCountryRoyalToggle();
     wireButtons();
     wireModalClose();
     wireNavButtons();
@@ -19,6 +20,24 @@ const Game = (() => {
     if (State.hasSave()) {
       document.getElementById('btn-continue').classList.remove('hidden');
     }
+  }
+
+  // ── Country → royalty toggle ──────────────────────────────────
+  function wireCountryRoyalToggle() {
+    const countrySel = document.getElementById('custom-country');
+    const royalOpt   = document.getElementById('royal-option');
+    const birthSel   = document.getElementById('custom-special-birth');
+    if (!countrySel || !royalOpt) return;
+    countrySel.addEventListener('change', () => {
+      const countryName = countrySel.value;
+      const country = DATA.COUNTRIES.find(c => c.name === countryName);
+      const hasRoyalty = !!(country && country.hasRoyalty);
+      royalOpt.disabled = !hasRoyalty;
+      royalOpt.textContent = hasRoyalty
+        ? `Born Royal — ${country.royalMaleName || 'Prince'}/${country.royalFemaleName || 'Princess'} of ${country.name}`
+        : 'Born Royal — select a monarchy first';
+      if (!hasRoyalty && birthSel.value === 'royal') birthSel.value = '';
+    });
   }
 
   // ── Personalization form ──────────────────────────────────────
@@ -38,8 +57,9 @@ const Game = (() => {
     const countryName = document.getElementById('custom-country').value;
     const country = countryName ? DATA.COUNTRIES.find(c => c.name === countryName) || null : null;
     const gender  = selectedGender;
-    const sexualityVal = document.getElementById('custom-sexuality')?.value || 'discover';
-    return { firstName: firstName || null, lastName: lastName || null, country, gender, sexuality: sexualityVal };
+    const sexualityVal  = document.getElementById('custom-sexuality')?.value || 'discover';
+    const specialBirth  = document.getElementById('custom-special-birth')?.value || '';
+    return { firstName: firstName || null, lastName: lastName || null, country, gender, sexuality: sexualityVal, specialBirth: specialBirth || null };
   }
 
   function generateCharacter() {
@@ -79,6 +99,11 @@ const Game = (() => {
     UI.updateDisplay();
     UI.showScreen('game');
     UI.showToast(`Welcome to the world, ${characterData.firstName}!`, 'good');
+    if (characterData.isRoyal) {
+      setTimeout(() => UI.showLifeMoment('👑', `${characterData.royalTitle} ${characterData.firstName}!`, `Born into the royal family of ${characterData.country}. Long may you reign.`, 'royal'), 600);
+    } else if (characterData.isNepobaby) {
+      setTimeout(() => UI.showLifeMoment('⭐', 'Born Famous!', 'The cameras are already rolling. Welcome to the spotlight.', 'nepo'), 600);
+    }
     pendingCharData = null;
   }
 

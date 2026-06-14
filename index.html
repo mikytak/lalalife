@@ -55,6 +55,15 @@
       </div>
 
       <div class="form-group">
+        <label>Special Birth</label>
+        <select class="form-input select-input" id="custom-special-birth">
+          <option value="">Normal birth</option>
+          <option value="nepo">Nepobaby — famous parents, starting fame</option>
+          <option value="royal" id="royal-option" disabled>Born Royal — select a monarchy first</option>
+        </select>
+      </div>
+
+      <div class="form-group">
         <label>Life Goal</label>
         <select class="form-input select-input" id="custom-lifegoal">
           <option value="">No specific goal</option>
@@ -285,6 +294,17 @@
       <button class="close-btn" data-close="log">x</button>
     </div>
     <div id="log-content" class="modal-body"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ PROJECT CREATE ═══════════════════════ -->
+<div id="modal-project-create" class="overlay hidden">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h3 id="projcreate-title">New Project</h3>
+      <button class="close-btn">×</button>
+    </div>
+    <div id="projcreate-content" class="modal-body"></div>
   </div>
 </div>
 

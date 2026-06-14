@@ -36,7 +36,7 @@ const Engine = (() => {
   }
 
   // ── Create a character with optional customization ─────────────
-  function createCharacter({ firstName, lastName, country, gender, sexuality } = {}) {
+  function createCharacter({ firstName, lastName, country, gender, sexuality, specialBirth } = {}) {
     const resolvedGender  = (gender === 'random' || !gender) ? (Math.random() < 0.5 ? 'female' : 'male') : gender;
     const resolvedCountry = country || DATA.randomCountry();
     const wealth          = DATA.randomWealthClass();
@@ -48,8 +48,9 @@ const Engine = (() => {
     const happiness = rnd(75, 10) + wealth.startBonus;
 
     // Resolve family names according to country tradition
-    const nameData = DATA.generateFamilyNames(lastName || null, resolvedCountry);
-    const childFirst = firstName || DATA.randomFrom(resolvedGender === 'female' ? DATA.FEMALE_NAMES : DATA.MALE_NAMES);
+    const nameData   = DATA.generateFamilyNames(lastName || null, resolvedCountry);
+    const namePool   = DATA.getCountryNamePool(resolvedCountry);
+    const childFirst = firstName || DATA.randomFrom(resolvedGender === 'female' ? namePool.female : namePool.male);
 
     // Apply legacy bonuses
     const legacy  = loadLegacy();
@@ -95,11 +96,33 @@ const Engine = (() => {
         : sexuality,
       genderIdentity: 'cis',
       sexualityKnown: sexuality !== 'discover',
+      projects:   [],
+      sportRecord: null,
     };
 
+    // Apply special birth bonuses
+    if (specialBirth === 'royal' && resolvedCountry.hasRoyalty) {
+      const title = resolvedGender === 'female' ? resolvedCountry.royalFemaleName : resolvedCountry.royalMaleName;
+      characterData.wealthClass  = 'ultra-rich';
+      characterData.money        = 12000000;
+      characterData.fame         = 60;
+      characterData.isRoyal      = true;
+      characterData.royalTitle   = title;
+      characterData.happiness    = Math.min(100, characterData.happiness + 20);
+    }
+
+    if (specialBirth === 'nepo') {
+      const wealthIdx    = DATA.WEALTH_CLASSES.findIndex(w => w.id === characterData.wealthClass);
+      const boostedClass = DATA.WEALTH_CLASSES[Math.min(DATA.WEALTH_CLASSES.length - 1, wealthIdx + 2)];
+      characterData.wealthClass = boostedClass.id;
+      characterData.money       = Math.round(boostedClass.startMoney * 1.6);
+      characterData.fame        = 20 + Math.floor(Math.random() * 20);
+      characterData.isNepobaby  = true;
+    }
+
     // Parents and siblings share the family surname
-    const dadFirst   = DATA.randomFrom(DATA.MALE_NAMES);
-    const momFirst   = DATA.randomFrom(DATA.FEMALE_NAMES);
+    const dadFirst   = DATA.randomFrom(namePool.male);
+    const momFirst   = DATA.randomFrom(namePool.female);
     const dadName    = `${dadFirst} ${nameData.fatherSurname}`;
     const momName    = `${momFirst} ${nameData.motherSurname}`;
     const dadAge     = 25 + Math.floor(Math.random() * 15);
@@ -109,13 +132,18 @@ const Engine = (() => {
     const counter = { val: 0 };
     const add = r => { r.id = 'rel_' + (++counter.val); relationships.push(r); };
 
-    add({ name:dadName, type:'family', subtype:'father', age:dadAge, relationship:70, traits:DATA.randomTraits(2), status:'active' });
-    add({ name:momName, type:'family', subtype:'mother', age:momAge, relationship:75, traits:DATA.randomTraits(2), status:'active' });
+    const dadTitle = specialBirth === 'royal' ? (resolvedCountry.royalMaleName   || 'Prince')   + ' ' : specialBirth === 'nepo' ? '' : '';
+    const momTitle = specialBirth === 'royal' ? (resolvedCountry.royalFemaleName || 'Princess') + ' ' : '';
+    const dadFame  = specialBirth === 'nepo' ? 50 + Math.floor(Math.random() * 35) : 0;
+    const momFame  = specialBirth === 'nepo' ? 40 + Math.floor(Math.random() * 35) : 0;
+    add({ name:`${dadTitle}${dadName}`, type:'family', subtype:'father', age:dadAge, relationship:70, traits:DATA.randomTraits(2), status:'active', fame:dadFame });
+    add({ name:`${momTitle}${momName}`, type:'family', subtype:'mother', age:momAge, relationship:75, traits:DATA.randomTraits(2), status:'active', fame:momFame });
 
     if (Math.random() < 0.6) {
       const sibGender = Math.random() < 0.5 ? 'male' : 'female';
-      const sibFirst  = DATA.randomFrom(sibGender === 'female' ? DATA.FEMALE_NAMES : DATA.MALE_NAMES);
-      add({ name:`${sibFirst} ${nameData.siblingSurname}`, type:'family', subtype:'sibling', age:Math.floor(Math.random()*8)+1, relationship:60, traits:DATA.randomTraits(2), status:'active' });
+      const sibFirst  = DATA.randomFrom(sibGender === 'female' ? namePool.female : namePool.male);
+      const sibTitle  = specialBirth === 'royal' ? (sibGender === 'female' ? (resolvedCountry.royalFemaleName || 'Princess') : (resolvedCountry.royalMaleName || 'Prince')) + ' ' : '';
+      add({ name:`${sibTitle}${sibFirst} ${nameData.siblingSurname}`, type:'family', subtype:'sibling', age:Math.floor(Math.random()*8)+1, relationship:60, traits:DATA.randomTraits(2), status:'active' });
     }
 
     return { characterData, relationships, initCounter: counter.val, nameData };
@@ -273,6 +301,20 @@ const Engine = (() => {
       const interest = Math.round(c.bank.savings * (c.bank.apy || 0.035));
       c.bank.savings += interest;
     }
+    // Creative project royalties
+    if (c.projects && c.projects.length) {
+      let totalRoyalties = 0;
+      c.projects.forEach(p => {
+        if (p.royaltiesPerYear > 0) {
+          // Royalties decay slightly each year (market moves on)
+          p.royaltiesPerYear = Math.round(p.royaltiesPerYear * (0.88 + Math.random() * 0.15));
+          c.money += p.royaltiesPerYear;
+          p.totalEarned = (p.totalEarned || 0) + p.royaltiesPerYear;
+          totalRoyalties += p.royaltiesPerYear;
+        }
+      });
+      if (totalRoyalties > 0) State.addLog(c.age, `Royalties: ${DATA.fmtMoney(totalRoyalties)} from your published works.`, 'career');
+    }
   }
 
   // ── Extracurricular passive gains each year ───────────────────
@@ -338,6 +380,9 @@ const Engine = (() => {
       State.addLog(c.age, `Promoted to ${next.title} — now earning ${DATA.fmtMoney(c.career.salary)}/yr!`, 'career');
       UI.showToast(`🎉 Promoted to ${next.title}! Now earning ${DATA.fmtMoney(c.career.salary)}/yr`, 'good');
       UI.updateDisplay();
+      if (c.career.promotionLevel === career.promotions.length - 1) {
+        UI.showLifeMoment('🏆', next.title + '!', 'You reached the very top. Nobody does it like you.', 'career');
+      }
     }
   }
 
@@ -356,6 +401,9 @@ const Engine = (() => {
         c.education.level = lvlMap[c.education.level] || 'bachelor';
         State.addLog(c.age, `Graduated with a degree in ${c.education.major} (${c.education.level})`, 'edu');
         UI.showToast(`Graduated! ${c.education.level} degree earned.`, 'good');
+        const gradEmoji = c.education.level === 'doctorate' ? '🎓' : '🎓';
+        const gradMsg   = c.education.level === 'doctorate' ? 'Doctor! The highest honour.' : c.education.level === 'master' ? 'Master\'s degree earned!' : 'College graduate!';
+        UI.showLifeMoment(gradEmoji, gradMsg, `${c.education.major} — all those late nights paid off.`, 'graduate');
       }
     }
   }
@@ -365,7 +413,7 @@ const Engine = (() => {
     if (a === 6  && edu.level === 'none')          { edu.level = 'elementary';   State.addLog(a, 'Started elementary school.', 'edu'); }
     if (a === 12 && edu.level === 'elementary')    { edu.level = 'middleschool'; State.addLog(a, 'Started middle school.', 'edu'); }
     if (a === 14 && edu.level === 'middleschool')  { edu.level = 'highschool';   State.addLog(a, 'Started high school.', 'edu'); }
-    if (a === 18 && edu.level === 'highschool')    { g.hasGraduatedHighSchool = true; State.addLog(a, 'Graduated high school!', 'edu'); UI.showToast('High school graduate!', 'good'); }
+    if (a === 18 && edu.level === 'highschool')    { g.hasGraduatedHighSchool = true; State.addLog(a, 'Graduated high school!', 'edu'); UI.showToast('High school graduate!', 'good'); UI.showLifeMoment('🎓', 'High School Graduate!', 'Cap, gown, and a whole future ahead.', 'graduate'); }
   }
 
   // ── Death check ───────────────────────────────────────────────
@@ -495,7 +543,13 @@ const Engine = (() => {
       }
       if (choice.marry) {
         const p = State.getPartner();
-        if (p) { p.subtype = 'spouse'; p.marriedAge = c.age; _assignSpouseWealth(p, c); State.addLog(c.age, `Married ${p.name}!`, 'rel'); UI.showToast(`Married ${p.name}!`, 'good'); }
+        if (p) {
+          p.subtype = 'spouse'; p.marriedAge = c.age; _assignSpouseWealth(p, c);
+          State.addLog(c.age, `Married ${p.name}!`, 'rel');
+          UI.showToast(`Married ${p.name}!`, 'good');
+          _applyRoyalMarriageBonus(c, p);
+          UI.showLifeMoment('💍', 'Just Married!', `You & ${p.name.split(' ')[0]} — forever starts now.`, 'marry');
+        }
       }
       if (choice.breakUp) {
         const p = State.getPartner();
@@ -518,10 +572,13 @@ const Engine = (() => {
       }
       if (choice.haveChild) {
         const cg  = Math.random() < 0.5 ? 'female' : 'male';
-        const cnm = DATA.randomFrom(cg === 'female' ? DATA.FEMALE_NAMES : DATA.MALE_NAMES);
+        const country = DATA.COUNTRIES.find(co => co.name === c.country) || null;
+        const pool = DATA.getCountryNamePool(country);
+        const cnm = DATA.randomFrom(cg === 'female' ? pool.female : pool.male);
         const rel = State.addRelationship({ name:`${cnm} ${c.lastName}`, type:'family', subtype:'child', age:0, relationship:80, traits:DATA.randomTraits(2), status:'active' });
         State.addLog(c.age, `${rel.name} was born!`, 'rel');
         UI.showToast(`${rel.name} is born!`, 'good');
+        UI.showLifeMoment('👶', `Welcome, ${cnm}!`, 'Your heart just got a little bigger.', 'baby');
       }
       if (choice.addCrush || event.addCrush) {
         const cg = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender === 'male' ? 'female' : 'male');
@@ -531,6 +588,7 @@ const Engine = (() => {
       if (choice.retire) {
         c.career.retired = true;
         State.addLog(c.age, `Retired after ${c.career.yearsAtJob} years of work.`, 'career');
+        UI.showLifeMoment('🌅', 'Retired!', 'You\'ve earned every single moment of this.', 'retire');
       }
       State.addLog(c.age, `${event.title}: ${choice.text}`, 'event');
 
@@ -566,6 +624,15 @@ const Engine = (() => {
       }
       if (event.log) State.addLog(c.age, event.log, 'event');
       else State.addLog(c.age, event.title, 'event');
+      // Cute life moment cards for memorable auto-events
+      const _autoMoments = {
+        'teen_first_kiss':    () => UI.showLifeMoment('💋', 'First Kiss!',       'Some moments you never forget.', 'love'),
+        'senior_grandchild':  () => UI.showLifeMoment('🥰', 'Grandparent!',      'The family just got even bigger.', 'grandparent'),
+        'teen_drivers_license':() => UI.showLifeMoment('🚗', 'Licensed Driver!',  'The open road is all yours now.', 'drive'),
+        'ya_first_apartment': () => UI.showLifeMoment('🏠', 'First Apartment!',  'It smells like old carpet and freedom.', 'home'),
+        'adult_windfall':     () => UI.showLifeMoment('💸', 'Unexpected Windfall!', 'Money from nowhere — don\'t question it.', 'career'),
+      };
+      if (_autoMoments[event.id]) _autoMoments[event.id]();
     }
 
     if (c.career.jobId && !g.jobHistory.includes(c.career.jobId)) g.jobHistory.push(c.career.jobId);
@@ -1553,18 +1620,20 @@ const Engine = (() => {
 
   function familyHangout() {
     const g = State.get(); const c = g.character;
-    const family = g.relationships.filter(r => r.type === 'family' && r.status === 'active');
-    if (!family.length) return { ok:false, msg:'No living family members.' };
+    const family  = g.relationships.filter(r => r.type === 'family' && r.status === 'active');
+    const spouse  = g.relationships.filter(r => r.subtype === 'spouse' && r.status === 'active');
+    const all     = [...family, ...spouse];
+    if (!all.length) return { ok:false, msg:'No family to hang out with.' };
     if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
     spendEnergy();
-    family.forEach(rel => { rel.relationship = Math.min(100, rel.relationship + 10); });
-    const happBoost = 12 + family.length * 2;
+    all.forEach(rel => { rel.relationship = Math.min(100, rel.relationship + 10); });
+    const happBoost = 12 + all.length * 2;
     State.applyEffects({ happiness: happBoost, mentalHealth: 8 });
     triggerMood('content', 2);
-    const names = family.slice(0,3).map(r=>r.name.split(' ')[0]).join(', ');
-    State.addLog(c.age, `Family hangout with ${names}${family.length>3?' and more':''}. Warm and wonderful.`, 'rel');
+    const names = all.slice(0, 3).map(r => r.name.split(' ')[0]).join(', ');
+    State.addLog(c.age, `Family hangout with ${names}${all.length > 3 ? ' and more' : ''}. Warm and wonderful.`, 'rel');
     State.saveGame();
-    return { ok:true, msg:`Family time with ${family.length} loved one${family.length>1?'s':''}. Everyone's bond grew!` };
+    return { ok:true, msg:`Quality time with ${all.length} loved one${all.length > 1 ? 's' : ''}! Every bond grew stronger.` };
   }
 
   function groupTrip(destinationId) {
@@ -1594,6 +1663,8 @@ const Engine = (() => {
   }
 
   // ── Online Dating ─────────────────────────────────────────────
+  const RAYA_FAME_MIN = 30; // fame needed to unlock Raya
+
   function generateDatingProfile(c) {
     const gen = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender === 'male' ? 'female' : 'male');
     const nm  = DATA.randomName(gen);
@@ -1609,7 +1680,66 @@ const Engine = (() => {
       'Optimist with occasional realist tendencies.',
       'Big on authenticity. Small on drama.',
     ];
-    return { name: nm.full, age: Math.max(18, age), interests, compatibility, bio: DATA.randomFrom(bios), gender: gen };
+    return { name: nm.full, age: Math.max(18, age), interests, compatibility, bio: DATA.randomFrom(bios), gender: gen, isRaya: false };
+  }
+
+  function generateRayaProfile(c) {
+    const gen         = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender === 'male' ? 'female' : 'male');
+    const interests   = DATA.randomTraits(3);
+    const sharedInterests = interests.filter(t => DATA.randomTraits(5).includes(t)).length;
+    // Raya profiles are harder to match with — they're picky
+    const compatibility = Math.round(25 + sharedInterests * 12 + (c.looks / 100) * 20 + (c.fame / 100) * 20 + Math.random() * 15);
+
+    // Decide: royal or famous?
+    const myCountry = DATA.COUNTRIES.find(co => co.name === c.country) || null;
+    const royalCountries = DATA.COUNTRIES.filter(co => co.hasRoyalty);
+    const makeRoyal = Math.random() < (myCountry?.hasRoyalty ? 0.4 : 0.2);
+
+    if (makeRoyal) {
+      const royalCountry = myCountry?.hasRoyalty ? myCountry : DATA.randomFrom(royalCountries);
+      const nm      = DATA.randomName(gen, royalCountry);
+      const title   = gen === 'female' ? (royalCountry.royalFemaleName || 'Princess') : (royalCountry.royalMaleName || 'Prince');
+      const age     = c.age + Math.floor(Math.random() * 10) - 4;
+      const royalBios = [
+        'Yes, this is a real profile. Discretion appreciated.',
+        'Looking for connection beyond the palace walls.',
+        'Tired of formal dinners. Craving realness.',
+        'Passport always ready. Protocols occasionally ignored.',
+        'The crown is heavy. Looking for someone to share the weight.',
+      ];
+      return {
+        name: `${title} ${nm.first} of ${royalCountry.name}`,
+        firstName: nm.first, age: Math.max(21, age), interests, compatibility,
+        bio: DATA.randomFrom(royalBios), gender: gen,
+        isRaya: true, isRoyal: true,
+        royalTitle: title, royalCountry: royalCountry.name,
+        royalTitleMale: royalCountry.royalMaleName || 'Prince',
+        royalTitleFemale: royalCountry.royalFemaleName || 'Princess',
+        fame: 70 + Math.floor(Math.random() * 25),
+      };
+    } else {
+      // Famous person — pick a career type for flavor
+      const famousCareers = ['musician', 'actor', 'model', 'athlete', 'filmmaker', 'fashion designer', 'content creator', 'artist'];
+      const career = DATA.randomFrom(famousCareers);
+      const nm     = DATA.randomName(gen);
+      const age    = c.age + Math.floor(Math.random() * 10) - 4;
+      const fameBios = [
+        `Just a ${career} trying to find something real.`,
+        'The spotlight is exhausting. You look interesting.',
+        'Verified. Real. Looking for the same.',
+        'Between projects. Open to something beautiful.',
+        'Fame is great. Having someone to share it with would be better.',
+        `Yes I'm that ${career}. No I won't perform on the first date.`,
+        'Swipe left if you only want a selfie.',
+      ];
+      const fame = 45 + Math.floor(Math.random() * 45);
+      return {
+        name: nm.full, firstName: nm.first, age: Math.max(20, age), interests, compatibility,
+        bio: DATA.randomFrom(fameBios), gender: gen,
+        isRaya: true, isRoyal: false, career,
+        fame,
+      };
+    }
   }
 
   function browseOnlineDating() {
@@ -1618,29 +1748,199 @@ const Engine = (() => {
     if (c.sexuality === 'asexual') return { ok:false, msg:'Not really your thing.' };
     if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
     const profiles = [generateDatingProfile(c), generateDatingProfile(c), generateDatingProfile(c)];
-    return { ok:true, profiles };
+    return { ok:true, profiles, isRaya: false };
+  }
+
+  function browseRaya() {
+    const c = State.getChar();
+    if (c.age < 18) return { ok:false, msg:'Must be 18+ for Raya.' };
+    if (c.sexuality === 'asexual') return { ok:false, msg:'Not really your thing.' };
+    if ((c.fame || 0) < RAYA_FAME_MIN) return { ok:false, msg:`You need at least ${RAYA_FAME_MIN} fame to join Raya. Keep building your profile.` };
+    if (State.getPartner()) return { ok:false, msg:'Already in a relationship.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    // 3 Raya profiles — mix of famous and royal
+    const profiles = [generateRayaProfile(c), generateRayaProfile(c), generateRayaProfile(c)];
+    return { ok:true, profiles, isRaya: true };
   }
 
   function connectWithMatch(profile) {
     const c = State.getChar();
     const alreadyHasPartner = State.getPartner();
     if (alreadyHasPartner) return { ok:false, msg:'Already in a relationship.' };
-    // Success based on looks + compatibility
-    const successChance = (c.looks / 100) * 0.4 + (profile.compatibility / 100) * 0.4 + 0.2;
+    // Raya profiles are harder to match — they weight your fame heavily
+    let successChance;
+    if (profile.isRaya) {
+      successChance = (c.looks / 100) * 0.25 + (profile.compatibility / 100) * 0.3 + (c.fame / 100) * 0.35 + 0.1;
+    } else {
+      successChance = (c.looks / 100) * 0.4 + (profile.compatibility / 100) * 0.4 + 0.2;
+    }
     if (Math.random() < successChance) {
-      const rel = State.addRelationship({ name:profile.name, type:'partner', subtype:'partner', age:profile.age, relationship:60, traits:profile.interests, status:'active' });
-      State.applyEffects({ happiness:15 });
+      const rel = State.addRelationship({
+        name: profile.name, type:'partner', subtype:'partner',
+        age: profile.age, relationship:60, traits: profile.interests, status:'active',
+        fame: profile.fame || 0,
+        isRoyal: profile.isRoyal || false,
+        royalTitle: profile.royalTitle || null,
+        royalCountry: profile.royalCountry || null,
+        royalTitleMale: profile.royalTitleMale || null,
+        royalTitleFemale: profile.royalTitleFemale || null,
+        career: profile.career || null,
+      });
+      const happBoost = profile.isRaya ? 20 : 15;
+      State.applyEffects({ happiness: happBoost, fame: Math.round((profile.fame || 0) * 0.1) });
       spendEnergy();
       triggerMood('excited', 2);
-      State.addLog(c.age, `Matched with ${rel.name} on a dating app!`, 'rel');
+      const src = profile.isRoyal ? 'Raya 👑' : profile.isRaya ? 'Raya ⭐' : 'a dating app';
+      State.addLog(c.age, `Matched with ${rel.name} on ${src}!`, 'rel');
       State.saveGame();
-      return { ok:true, matched:true, msg:`Matched with ${profile.name}! You are now connected.` };
+      return { ok:true, matched:true, msg:`Matched with ${profile.name}!${profile.isRoyal ? ' 👑 Royalty!' : profile.isRaya ? ' ⭐ Famous match!' : ''}` };
     } else {
       State.applyEffects({ happiness:-3 });
       spendEnergy();
       State.saveGame();
-      return { ok:true, matched:false, msg:`${profile.name} did not match back. Better luck next time.` };
+      const rejMsg = profile.isRoyal
+        ? `${profile.name} wasn't feeling it. The palace gates stay closed for now.`
+        : profile.isRaya
+        ? `${profile.name} left you on read. Brutal.`
+        : `${profile.name} did not match back. Better luck next time.`;
+      return { ok:true, matched:false, msg:rejMsg };
     }
+  }
+
+  // When marrying a royal from Raya — grant the player a courtesy title
+  function _applyRoyalMarriageBonus(c, partnerRel) {
+    if (!partnerRel.isRoyal) return;
+    const myTitle = c.gender === 'female'
+      ? (partnerRel.royalTitleFemale || 'Princess')
+      : (partnerRel.royalTitleMale   || 'Prince');
+    c.royalTitle        = myTitle + ' Consort';
+    c.isRoyal           = true;
+    c.fame              = Math.min(100, (c.fame || 0) + 30);
+    c.money             = Math.round((c.money || 0) + 2000000);
+    State.addLog(c.age, `Married into royalty! Now known as ${myTitle} Consort ${c.firstName} ${c.lastName}.`, 'rel');
+    UI.showLifeMoment('👑', `${myTitle} Consort!`, `You married into the royal family. Long may you reign.`, 'royal');
+  }
+
+  // ── Creative Projects ─────────────────────────────────────────
+  function _calcProjectRoyalties(reception, scopeRoyaltyMod, fame) {
+    let base;
+    if      (reception < 25) base = 0;
+    else if (reception < 45) base = Math.round(200  + Math.random() * 2800);
+    else if (reception < 62) base = Math.round(3000 + Math.random() * 12000);
+    else if (reception < 75) base = Math.round(15000 + Math.random() * 60000);
+    else if (reception < 85) base = Math.round(80000 + Math.random() * 200000);
+    else if (reception < 93) base = Math.round(300000 + Math.random() * 700000);
+    else                     base = Math.round(1200000 + Math.random() * 3800000);
+    return Math.round(base * (scopeRoyaltyMod || 1) * (1 + (fame || 0) / 200));
+  }
+
+  function createProject(type, title, genre, scopeId) {
+    const c = State.getChar();
+    if (!c) return { ok:false, msg:'No character.' };
+    const def = DATA.CREATIVE_PROJECT_DEFS[type];
+    if (!def) return { ok:false, msg:'Unknown project type.' };
+    if (!def.careers.includes(c.career.jobId)) return { ok:false, msg:'Your current career doesn\'t cover this.' };
+    if (!hasEnergy(2)) return { ok:false, msg:'Need 2 energy to create a project.' };
+
+    if (!c.projects) c.projects = [];
+
+    // Reception formula
+    const statVal   = c[def.statKey] || 50;
+    const hobby     = c.hobbies.find(h => h.id === def.hobbyKey);
+    const hobbySkill = hobby ? hobby.skillLevel : 0;
+    const famBoost  = (c.fame || 0) * 0.15;
+    const careerBoost = (c.career.promotionLevel || 0) * 4;
+    const luck      = (Math.random() * 30) - 8;
+    const reception = Math.min(100, Math.max(0, Math.round(
+      statVal * 0.28 + hobbySkill * 0.22 + famBoost + careerBoost + 18 + luck
+    )));
+
+    const scope     = def.scopes?.find(s => s.id === scopeId) || def.scopes?.[0];
+    const royalties = _calcProjectRoyalties(reception, scope?.royaltyMod || 1, c.fame);
+    const initialSale = Math.round(royalties * (0.3 + Math.random() * 0.4));
+
+    const project = {
+      id: 'proj_' + (c.projects.length + 1),
+      type, title, genre,
+      scope: scope?.id || 'default', scopeLabel: scope?.label || '',
+      createdAge: c.age, reception,
+      royaltiesPerYear: royalties,
+      totalEarned: initialSale,
+    };
+
+    c.projects.push(project);
+    c.money += initialSale;
+    c.fame   = Math.min(100, (c.fame || 0) + Math.round(reception / 8));
+    spendEnergy(2);
+
+    const descIdx = Math.min(4, Math.floor(reception / 20));
+    const recDesc = def.receptionDesc[descIdx];
+    State.addLog(c.age, `Published "${title}" (${genre} ${type}). ${recDesc}! Reception: ${reception}/100. Initial sales: ${DATA.fmtMoney(initialSale)}.`, 'career');
+    State.saveGame();
+    return { ok:true, project, initialSale, recDesc };
+  }
+
+  function getProjectableDef(jobId) {
+    if (!jobId) return null;
+    return Object.entries(DATA.CREATIVE_PROJECT_DEFS).find(([, d]) => d.careers.includes(jobId)) || null;
+  }
+
+  // ── Sports Season ─────────────────────────────────────────────
+  function playSeason() {
+    const g = State.get(); const c = g.character;
+    if (!c.career.jobId) return { ok:false, msg:'No sports career.' };
+    const career = DATA.getCareer(c.career.jobId);
+    if (!career || career.category !== 'sports') return { ok:false, msg:'Not a sports career.' };
+    if (!hasEnergy(2)) return { ok:false, msg:'Need 2 energy for a full season.' };
+
+    const sportKey = career.sportKey;
+    const sportDef = DATA.SPORT_DEFS[sportKey];
+    if (!sportDef) return { ok:false, msg:'Unknown sport.' };
+
+    // Win rate: health + performance + age peak
+    const peakAge  = sportKey === 'boxing' ? 27 : sportKey === 'swimming' ? 22 : 27;
+    const ageFactor = Math.max(0.35, 1 - Math.abs(c.age - peakAge) / 18);
+    const winRate   = (c.health / 100) * 0.4 + (c.career.performance / 100) * 0.35 + ageFactor * 0.25;
+
+    let wins = 0, losses = 0;
+    const games = sportDef.gamesPerSeason;
+    const highlights = [];
+    for (let i = 0; i < games; i++) {
+      if (Math.random() < winRate) wins++;
+      else losses++;
+    }
+
+    // Check championships won this season
+    const titlesWon = sportDef.championships
+      .filter(ch => wins >= ch.winsMin && Math.random() < 0.6)
+      .map(ch => ch.name);
+
+    // Update career record
+    if (!c.sportRecord) c.sportRecord = { sport:sportKey, careerWins:0, careerLosses:0, titles:[], seasons:[] };
+    c.sportRecord.careerWins   += wins;
+    c.sportRecord.careerLosses += losses;
+    titlesWon.forEach(t => { if (!c.sportRecord.titles.includes(t)) c.sportRecord.titles.push(t); });
+    c.sportRecord.seasons.push({ age:c.age, wins, losses, titles:titlesWon });
+
+    // Rewards
+    const famGain   = Math.round(wins * 0.6 + titlesWon.length * 12);
+    const moneyBonus = Math.round(wins * c.career.salary / Math.max(1, games) * 0.6 + titlesWon.length * 60000);
+    c.fame   = Math.min(100, (c.fame || 0) + famGain);
+    c.money += moneyBonus;
+    const perfDelta = Math.round((wins / games - 0.5) * 20);
+    c.career.performance = Math.min(100, Math.max(20, c.career.performance + perfDelta));
+    c.health = Math.max(1, c.health - (3 + Math.floor(Math.random() * 4)));
+
+    spendEnergy(2);
+    State.applyEffects({ happiness: wins > losses ? 12 : -6, mentalHealth: wins > losses ? 5 : -5 });
+
+    const logLine = `${sportDef.label} season: ${wins}W–${losses}L${titlesWon.length ? '. 🏆 ' + titlesWon.join(', ') : ''}.`;
+    State.addLog(c.age, logLine, 'career');
+
+    if (titlesWon.length) UI.showLifeMoment('🏆', titlesWon[0] + '!', `${wins}W–${losses}L this season. Champion!`, 'career');
+
+    State.saveGame();
+    return { ok:true, wins, losses, titlesWon, famGain, moneyBonus, sportDef, winRate, games };
   }
 
   // ── Style & Tattoos ───────────────────────────────────────────
@@ -2816,7 +3116,8 @@ const Engine = (() => {
     doSocialMedia, doSideHustle, travel,
     triggerMood, manageCondition,
     addToCircle, removeFromCircle, groupHangout, familyHangout, groupTrip,
-    browseOnlineDating, connectWithMatch,
+    browseOnlineDating, browseRaya, connectWithMatch, RAYA_FAME_MIN,
+    createProject, getProjectableDef, playSeason,
     changeStyle, getTattoo,
     depositSavings, withdrawSavings, payDebt,
     setBucketGoals, checkBucketList,

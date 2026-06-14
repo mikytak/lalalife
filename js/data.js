@@ -10,14 +10,24 @@ const DATA = (() => {
     'Jackson','Sebastian','Henry','Owen','Ryan','Nathan','Caleb','Isaac','Adam','Theo',
     'Carlos','Marco','Kenji','Andre','Dmitri','Finn','Ravi','Idris','Mateo','Soren',
     'Viktor','Ezra','Miles','Jasper','Felix','Atticus','Ronan','Hugo','Caspian','Zane',
-    'Diego','Santiago','Alejandro','Pablo','Miguel','Rafael','Javier','Luis','Eduardo','Andres'
+    'Diego','Santiago','Alejandro','Pablo','Miguel','Rafael','Javier','Luis','Eduardo','Andres',
+    'Elias','Julian','Adrian','Dominic','Leonardo','Tobias','Rhys','Kieran','Matteo','Nico',
+    'Cyrus','Damon','Emilio','Fabian','Gio','Hamish','Isidore','Jett','Kian','Leandro',
+    'Maxwell','Naveen','Otto','Pierce','Quentin','Roman','Stellan','Tariq','Ulric','Vance',
+    'Warren','Xander','Yusuf','Zephyr','Amos','Bram','Cillian','Dag','Edmund','Florian',
+    'Gideon','Hector','Ivan','Joaquin','Kaspar','Lorenz','Milo','Nils','Osiris','Phelan'
   ];
   const FEMALE_NAMES = [
     'Emma','Olivia','Ava','Sophia','Mia','Isabella','Charlotte','Amelia','Harper','Evelyn',
     'Luna','Nora','Lily','Eleanor','Violet','Zoe','Chloe','Penelope','Layla','Aurora',
     'Sofia','Aria','Isla','Scarlett','Maya','Stella','Elena','Naomi','Cora','Quinn',
     'Freya','Niamh','Ingrid','Yuki','Priya','Aaliyah','Sienna','Camille','Adaeze','Lena',
-    'Carmen','Valentina','Lucia','Catalina','Gabriela','Isabel','Patricia','Rosa','Mariana','Fernanda'
+    'Carmen','Valentina','Lucia','Catalina','Gabriela','Isabel','Patricia','Rosa','Mariana','Fernanda',
+    'Astrid','Beatrix','Celeste','Delphine','Esme','Fiona','Genevieve','Hana','Iris','Juniper',
+    'Katarina','Lila','Marisol','Nadia','Odette','Petra','Rosaline','Simone','Thea','Uma',
+    'Vesna','Winona','Xanthe','Yara','Zahra','Aoife','Brigid','Calista','Dara','Elowen',
+    'Fleur','Giselle','Heloise','Imara','Jaya','Kassia','Liora','Maren','Neve','Orla',
+    'Paloma','Remi','Saoirse','Talia','Ursula','Viveka','Wren','Xiomara','Yumi','Zula'
   ];
   const LAST_NAMES = [
     'Smith','Johnson','Williams','Brown','Davis','Miller','Wilson','Moore','Taylor','Anderson',
@@ -27,34 +37,181 @@ const DATA = (() => {
     'Nguyen','Patel','Cohen','Murphy','Rivera','Chen','Morgan','Reed','Bailey','Brooks',
     'Lopez','Garcia','Martinez','Hernandez','Gonzalez','Rodriguez','Perez','Sanchez','Ramirez','Torres',
     'Fernandez','Diaz','Morales','Cruz','Reyes','Ramos','Ortega','Jimenez','Vargas','Gutierrez',
-    'Evans','Collins','Stewart','Morris','Rogers','Reed','Cook','Simmons','Bell','Price'
+    'Collins','Stewart','Morris','Rogers','Cook','Simmons','Bell','Price','Hayes','Griffin',
+    'Okafor','Adeyemi','Kimura','Tanaka','Petrov','Vogel','Larsson','Dubois','Rossi','Nkosi',
+    'Osei','Alves','Ferreira','Ivanova','Andersen','Kowalski','Hajek','Popov','Suarez','Reyes'
   ];
 
-  // ── Countries — doubleSurname marks Spanish-naming tradition ──
+  // ── Country-specific name pools ─────────────────────────────────
+  const COUNTRY_NAMES = {
+    'United States': {
+      male:   ['James','Noah','Liam','Ethan','Jackson','Mason','Logan','Aiden','Carter','Sebastian','Hunter','Landon','Wyatt','Cooper','Lincoln','Grayson','Beau','Beckett','Nolan','Brooks','Blake','Cole','Grady','Holden','Jace','Knox','Lane','Maddox','Reid','Tate'],
+      female: ['Emma','Olivia','Ava','Sophia','Mia','Isabella','Charlotte','Amelia','Harper','Evelyn','Abigail','Emily','Elizabeth','Sofia','Avery','Ella','Scarlett','Grace','Chloe','Zoey','Aubrey','Riley','Addison','Savannah','Brooklyn','Paisley','Kennedy','Stella','Violet','Aurora'],
+      last:   ['Smith','Johnson','Williams','Brown','Davis','Miller','Wilson','Moore','Taylor','Anderson','Thomas','Jackson','White','Harris','Martin','Thompson','Robinson','Clark','Lewis','Walker','Hall','Allen','Young','King','Wright','Scott','Baker','Adams','Nelson','Campbell']
+    },
+    'United Kingdom': {
+      male:   ['Oliver','Harry','George','Jack','Alfie','Oscar','Charlie','Thomas','William','Archie','Theo','Edward','Arthur','Noah','Freddie','Reuben','Rupert','Hugo','Barnaby','Jasper','Kit','Monty','Piers','Quentin','Toby','Cecil','Edmund','Gilbert','Nigel','Alastair'],
+      female: ['Olivia','Amelia','Isla','Ava','Mia','Freya','Lily','Emily','Sophia','Ella','Poppy','Evie','Isabella','Jessica','Grace','Sophie','Scarlett','Imogen','Ellie','Alice','Beatrice','Clarissa','Cordelia','Eugenie','Felicity','Harriet','Lavinia','Margot','Rosalind','Venetia'],
+      last:   ['Smith','Jones','Williams','Taylor','Brown','Davies','Evans','Wilson','Thomas','Roberts','Johnson','Walker','Wright','Thompson','White','Hughes','Edwards','Green','Hall','Wood','Clarke','Harrison','Lewis','Turner','Martin','Cooper','Ward','Morris','Barker','Shaw']
+    },
+    'Canada': {
+      male:   ['Liam','Noah','Oliver','William','Benjamin','Elijah','James','Lucas','Mason','Ethan','Logan','Alexander','Aiden','Jackson','Sebastian','Jacob','Carter','Gabriel','Owen','Connor','Declan','Finn','Griffin','Hudson','Keegan','Lennox','Malcolm','Niall','Reid','Rowan'],
+      female: ['Emma','Olivia','Ava','Charlotte','Sophia','Isabella','Amelia','Abigail','Emily','Mia','Lily','Ella','Chloe','Madison','Addison','Riley','Zoey','Hannah','Natalie','Claire','Audrey','Brooklyn','Camille','Dahlia','Evangeline','Fiona','Genevieve','Isla','Jade','Keira'],
+      last:   ['Smith','Brown','Tremblay','Martin','Roy','Wilson','Macdonald','Gagnon','Johnson','Taylor','Campbell','Anderson','Leblanc','Williams','Bouchard','Jones','Murray','Lavoie','Fortin','Côté','Pelletier','Gauthier','Morin','Simard','Lapointe','Beaulieu','Ouellet','Turgeon','Bélanger','Lemay']
+    },
+    'Australia': {
+      male:   ['Oliver','Jack','Noah','William','Lucas','Thomas','James','Liam','Henry','Ethan','Archer','Bailey','Flynn','Heath','Jensen','Koby','Lachlan','Mitch','Nash','Reef','Riley','Seb','Taj','Zach','Angus','Brody','Callum','Declan','Hamish','Kai'],
+      female: ['Charlotte','Olivia','Ava','Amelia','Mia','Isla','Grace','Sophie','Zoe','Chloe','Billie','Delta','Eden','Frankie','Harper','Indie','Jade','Keely','Lena','Matilda','Nadia','Pippa','Quinn','Ruby','Sadie','Tara','Uma','Violet','Willow','Zara'],
+      last:   ['Smith','Jones','Williams','Brown','Wilson','Taylor','Johnson','White','Martin','Anderson','Thompson','Davis','Clark','Lewis','Lee','Walker','Hall','Allen','Young','Mitchell','Robinson','Harris','Turner','Moore','Evans','Cooper','Edwards','Roberts','Hill','Cook']
+    },
+    'Germany': {
+      male:   ['Lukas','Leon','Paul','Jonas','Noah','Felix','Maximilian','Finn','Elias','Luis','Ben','Jan','Tobias','Simon','David','Alexander','Niklas','Moritz','Julian','Patrick','Benedikt','Christian','Daniel','Erik','Friedrich','Gregor','Hans','Johann','Karl','Lorenz'],
+      female: ['Emma','Hannah','Mia','Sofia','Lena','Leonie','Anna','Lea','Marie','Laura','Lisa','Johanna','Sarah','Katharina','Nina','Julia','Sophia','Charlotte','Franziska','Elena','Birgit','Clara','Dorothee','Elke','Friederike','Greta','Hanna','Ines','Jana','Klara'],
+      last:   ['Müller','Schmidt','Schneider','Fischer','Weber','Meyer','Wagner','Becker','Hoffmann','Schäfer','Koch','Bauer','Richter','Klein','Wolf','Schröder','Neumann','Schwarz','Zimmermann','Braun','Hartmann','Lange','Werner','Krause','Böhm','Schulze','Maier','Frank','Lehmann','Haas']
+    },
+    'France': {
+      male:   ['Hugo','Louis','Lucas','Léo','Mathis','Nathan','Tom','Théo','Enzo','Maxime','Arthur','Baptiste','Clément','Damien','Edouard','François','Gaston','Henri','Julien','Kevin','Laurent','Mathieu','Nicolas','Olivier','Pascal','Quentin','Raphaël','Sébastien','Tristan','Ugo'],
+      female: ['Emma','Léa','Jade','Louise','Manon','Inès','Camille','Zoé','Chloé','Sarah','Léonie','Alice','Anaïs','Béatrice','Céline','Delphine','Elodie','Fleur','Gaëlle','Hélène','Isabelle','Juliette','Karine','Laure','Margot','Nathalie','Océane','Pauline','Roxane','Solène'],
+      last:   ['Martin','Bernard','Thomas','Petit','Robert','Richard','Durand','Dubois','Moreau','Simon','Laurent','Lefebvre','Michel','Garcia','David','Bertrand','Roux','Vincent','Fournier','Morin','Girard','André','Mercier','Dupont','Lambert','Bonnet','François','Martinez','Legrand','Garnier']
+    },
+    'Japan': {
+      male:   ['Haruto','Yuto','Sota','Yuki','Hayato','Haruki','Ryusei','Koki','Sora','Ren','Kaito','Hiroto','Shun','Minato','Itsuki','Takumi','Riku','Kento','Naoki','Kenji','Akira','Daisuke','Fumio','Genta','Hiroshi','Ichiro','Junpei','Kazuma','Makoto','Noriaki'],
+      female: ['Yui','Hina','Rio','Yuna','Akari','Saki','Mio','Hana','Misaki','Aoi','Riko','Nana','Rin','Mei','Mitsuki','Sakura','Koharu','Noa','Yuka','Miho','Asahi','Chika','Emi','Fuyu','Hikari','Iroha','Kasumi','Kotone','Mayu','Nanami'],
+      last:   ['Sato','Suzuki','Takahashi','Tanaka','Watanabe','Ito','Yamamoto','Nakamura','Kobayashi','Kato','Yoshida','Yamada','Sasaki','Yamaguchi','Matsumoto','Inoue','Kimura','Hayashi','Shimizu','Yamazaki','Mori','Abe','Ikeda','Hashimoto','Ishikawa','Ogawa','Maeda','Fujita','Okamoto','Goto']
+    },
+    'Brazil': {
+      male:   ['Lucas','Gabriel','Matheus','Pedro','Guilherme','Felipe','Rafael','Vitor','Caio','Bruno','Augusto','Bernardo','Carlos','Davi','Eduardo','Fernando','Gustavo','Henrique','Igor','João','Leonardo','Marcos','Nicolas','Paulo','Ricardo','Rodrigo','Samuel','Thiago','Vinícius','Wagner'],
+      female: ['Isabella','Sophia','Alice','Valentina','Manuela','Luísa','Heloísa','Larissa','Beatriz','Ana','Brenda','Camila','Daniela','Fernanda','Giovanna','Helena','Íris','Júlia','Lara','Marcela','Natália','Olívia','Patrícia','Rafaela','Sara','Thaís','Úrsula','Vitória','Yasmin','Zara'],
+      last:   ['Silva','Santos','Oliveira','Souza','Rodrigues','Ferreira','Alves','Pereira','Lima','Gomes','Costa','Ribeiro','Martins','Carvalho','Almeida','Lopes','Sousa','Fernandes','Vieira','Barbosa','Rocha','Dias','Nascimento','Andrade','Moreira','Nunes','Marques','Machado','Mendes','Freitas']
+    },
+    'Mexico': {
+      male:   ['José','Luis','Carlos','Juan','Miguel','Alejandro','Jesús','Antonio','Ricardo','Roberto','Abel','Armando','Bernardo','César','Daniel','Eduardo','Fernando','Gerardo','Héctor','Ignacio','Jorge','Kevin','Leonardo','Manuel','Nicolás','Omar','Pablo','Raúl','Sergio','Tomás'],
+      female: ['María','Sofía','Valentina','Isabella','Camila','Fernanda','Daniela','Mariana','Valeria','Alejandra','Brenda','Carmen','Diana','Elena','Fabiola','Gabriela','Ingrid','Jimena','Karen','Leticia','Monica','Norma','Patricia','Rosa','Sandra','Teresa','Ursula','Verónica','Wendy','Ximena'],
+      last:   ['García','Martínez','López','González','Hernández','Pérez','Sánchez','Ramírez','Torres','Flores','Rivera','Gómez','Díaz','Reyes','Morales','Cruz','Ortega','Jiménez','Vargas','Romero','Guerrero','Mendoza','Castillo','Moreno','Herrera','Medina','Vega','Delgado','Ríos','Gutiérrez']
+    },
+    'India': {
+      male:   ['Arjun','Rahul','Rohan','Aditya','Vikram','Karan','Siddharth','Aarav','Ishaan','Vihaan','Abhimanyu','Bharat','Chetan','Dev','Eklavya','Farhan','Gaurav','Harsh','Ishan','Jatin','Kabir','Lakshman','Manav','Nikhil','Omkar','Prashant','Rajesh','Sanjay','Tarun','Uday'],
+      female: ['Priya','Ananya','Neha','Divya','Kavya','Pooja','Riya','Siya','Trisha','Aanya','Aditi','Bhavna','Charu','Deepika','Esha','Fatima','Gauri','Hema','Ishita','Jyoti','Kajal','Lakshmi','Meera','Nisha','Ojasvi','Pallavi','Reena','Seema','Tara','Uma'],
+      last:   ['Sharma','Patel','Singh','Kumar','Gupta','Joshi','Verma','Mehta','Shah','Chaudhary','Agarwal','Rao','Nair','Reddy','Iyer','Kapoor','Bose','Das','Chatterjee','Mishra','Malhotra','Pillai','Sinha','Saxena','Chopra','Banerjee','Ghosh','Murthy','Naidu','Pandey']
+    },
+    'South Africa': {
+      male:   ['Thabo','Sipho','Bongani','Lungelo','Siyanda','Pieter','Christiaan','André','Ruan','Wilhelm','Blessing','Calvin','Desmond','Ethan','Fanele','Gift','Hlanganani','Ishmael','Jabulani','Khaya','Lethiwe','Mandla','Nhlanhla','Oluwaseun','Prince','Qhawe','Sandile','Themba','Unathi','Vusi'],
+      female: ['Nomvula','Zinhle','Ayanda','Lindiwe','Busisiwe','Anke','Chantal','Elzette','Heidi','Ina','Johanna','Karien','Liezel','Marlene','Natasha','Petro','Riana','Sanelisiwe','Thandeka','Unathi','Amahle','Bongiwe','Duduzile','Fikile','Gcinile','Hlengiwe','Ntombifuthi','Phumzile','Sibongile','Zodwa'],
+      last:   ['Dlamini','Ndlovu','Nkosi','Khumalo','Mthembu','Zulu','Mhlongo','Ntuli','Shabalala','Nxumalo','van der Merwe','Botha','Pretorius','du Plessis','Viljoen','Swanepoel','Coetzee','Joubert','Rousseau','de Wet','Osei','Mensah','Abiodun','Okafor','Adeyemi','Nwosu','Eze','Ike','Diallo','Mbeki']
+    },
+    'Nigeria': {
+      male:   ['Emeka','Chidi','Tunde','Seun','Kunle','Chukwuemeka','Adebayo','Babatunde','Chinedu','Damilola','Eze','Femi','Gbenga','Hakeem','Ifeanyi','Jide','Kayode','Lanre','Musa','Ngozi','Obinna','Pelu','Rotimi','Sola','Tobi','Uche','Victor','Wale','Yemi','Zuberu'],
+      female: ['Ngozi','Amaka','Chioma','Adaeze','Kemi','Abimbola','Blessing','Chidinma','Damilola','Eno','Funmilayo','Grace','Hauwa','Ijeoma','Jumoke','Kelechi','Latifat','Munirat','Nnenna','Oluwakemi','Peace','Rashidat','Sade','Titi','Uche','Vivian','Wunmi','Yetunde','Zinny','Aisha'],
+      last:   ['Okafor','Adeyemi','Nwosu','Eze','Obi','Chukwu','Nwachukwu','Ike','Onwu','Uche','Balogun','Adeleke','Adesanya','Babatunde','Fadahunsi','Ibrahim','Jimoh','Lawal','Musa','Nzinga','Ogundipe','Salami','Taiwo','Usman','Yakubu','Abubakar','Bello','Danjuma','Garba','Hassan']
+    },
+    'Sweden': {
+      male:   ['Lars','Erik','Anders','Johan','Karl','Per','Nils','Sven','Gustaf','Henrik','Axel','Björn','Carl','David','Emil','Fredrik','Gustav','Hugo','Isak','Joel','Kjell','Lennart','Magnus','Oscar','Patrik','Rasmus','Stefan','Tobias','Viktor','Wilhelm'],
+      female: ['Astrid','Ingrid','Sigrid','Birgit','Anna','Maria','Karin','Eva','Helena','Kristina','Alva','Britta','Cecilia','Diana','Elsa','Frida','Gunilla','Hanna','Inger','Jenny','Kajsa','Linnea','Maja','Nora','Petra','Sofia','Ulrika','Vera','Wilma','Ylva'],
+      last:   ['Johansson','Andersson','Karlsson','Nilsson','Eriksson','Larsson','Olsson','Persson','Svensson','Gustafsson','Pettersson','Jonsson','Jansson','Hansson','Bengtsson','Jönsson','Lindberg','Jakobsson','Magnusson','Olofsson','Lindström','Lindqvist','Lindgren','Berg','Axelsson','Bergström','Lundberg','Lundqvist','Mattsson','Lundgren']
+    },
+    'Spain': {
+      male:   ['Carlos','Alejandro','Pablo','Miguel','Javier','Daniel','David','Adrián','Sergio','Fernando','Alberto','Antonio','Álvaro','Borja','César','Diego','Enrique','Francisco','Guillermo','Héctor','Ignacio','Jorge','Juan','Luis','Manuel','Nicolás','Óscar','Pedro','Rafael','Rubén'],
+      female: ['Carmen','Isabel','María','Ana','Sofia','Lucia','Valentina','Marta','Laura','Paula','Adriana','Beatriz','Claudia','Diana','Elena','Fernanda','Gloria','Inés','Julia','Leire','Mónica','Natalia','Olga','Patricia','Raquel','Sandra','Teresa','Verónica','Xenia','Yolanda'],
+      last:   ['García','Martínez','López','González','Rodríguez','Fernández','Sánchez','Pérez','Martín','Gómez','Ruiz','Hernández','Jiménez','Díaz','Moreno','Muñoz','Álvarez','Romero','Navarro','Torres','Domínguez','Vázquez','Ramos','Gil','Serrano','Blanco','Molina','Morales','Suárez','Guerrero']
+    },
+    'Italy': {
+      male:   ['Marco','Luca','Alessandro','Francesco','Lorenzo','Andrea','Matteo','Davide','Giovanni','Roberto','Antonio','Bruno','Carlo','Daniele','Emanuele','Filippo','Giorgio','Giuseppe','Leonardo','Nicola','Paolo','Pietro','Raffaele','Riccardo','Simone','Stefano','Tommaso','Umberto','Vincenzo','Alberto'],
+      female: ['Sofia','Giulia','Emma','Martina','Chiara','Alice','Francesca','Sara','Valentina','Aurora','Beatrice','Camilla','Claudia','Daniela','Elisa','Federica','Ginevra','Ilaria','Jessica','Laura','Melissa','Noemi','Paola','Rachele','Roberta','Serena','Silvia','Stefania','Valeria','Viviana'],
+      last:   ['Rossi','Ferrari','Esposito','Bianchi','Romano','Colombo','Ricci','Marino','Greco','Bruno','Gallo','Conti','De Luca','Costa','Giordano','Mancini','Rizzo','Lombardi','Moretti','Barbieri','Fontana','Santoro','Marini','Rinaldi','Caruso','Ferrara','Gatti','Palumbo','Sanna','Fabbri']
+    },
+    'South Korea': {
+      male:   ['Min-jun','Ji-ho','Seo-jun','Ye-jun','Do-yun','Si-woo','Joo-won','Jun-seo','Hyun-woo','Seung-jun','Bin','Chan','Da-won','Eun-ho','Gi-tae','Ha-neul','In-ho','Jae-won','Kang-min','Lee-jun','Min-su','Na-yeon','Oh-joon','Park-jin','Rae-won','Su-hyeon','Tae-yang','Woo-jin','Yong-jun','Zion'],
+      female: ['Soo-yeon','Ji-yeon','Hye-jin','Min-ju','Yuna','Soo-bin','Ji-soo','Ha-eun','Ye-jin','Da-eun','Ah-reum','Bo-ra','Chae-won','Da-hye','Eun-ji','Ga-yeon','Ha-young','In-na','Ji-min','Kang-hee','Lee-na','Mi-rae','Na-yeon','Oh-yeon','Ri-na','Se-young','Tae-yeon','Woo-ri','Yeo-jin','Zi-yeon'],
+      last:   ['Kim','Lee','Park','Choi','Jung','Kang','Cho','Yoon','Jang','Lim','Han','Oh','Seo','Shin','Kwon','Hwang','Ahn','Song','Yoo','Hong','Jeon','Ko','Moon','Bae','Heo','Nam','Sim','Noh','Ha','Gong']
+    },
+    'China': {
+      male:   ['Wei','Ming','Jun','Hao','Tao','Fang','Lei','Jie','Kai','Bo','Changming','Dechang','Fenggang','Guangwei','Haoran','Jiaming','Kexin','Longwei','Mingzhi','Nian','Peng','Qilong','Renxiang','Sheng','Tianyi','Wanxiang','Xingchen','Yanlong','Zhihao','Zilong'],
+      female: ['Xia','Ling','Mei','Fang','Yun','Li','Hui','Jing','Ping','Yan','Aijun','Bingbing','Chunhua','Dandan','Erjuan','Fenfang','Guiying','Haimei','Jianying','Keyan','Lianying','Meimei','Niuniu','Peijin','Qingqing','Rongrong','Shufen','Tianyi','Wangfang','Xiuying'],
+      last:   ['Wang','Li','Zhang','Liu','Chen','Yang','Huang','Zhao','Wu','Zhou','Xu','Sun','Zhu','Ma','Hu','Guo','Lin','He','Gao','Liang','Zheng','Luo','Song','Xie','Tang','Han','Cao','Deng','Feng','Yu']
+    },
+    'Argentina': {
+      male:   ['Santiago','Mateo','Benjamín','Bautista','Tomás','Valentín','Lautaro','Joaquín','Luciano','Facundo','Agustín','Bruno','Camilo','Dante','Emiliano','Franco','Gonzalo','Hernán','Ignacio','Juan','Kevin','Leonardo','Marcos','Nicolás','Octavio','Pablo','Ramiro','Rodrigo','Sebastián','Thiago'],
+      female: ['Valentina','Lucía','Isabella','Sofía','Camila','Martina','Emma','Clara','Agustina','Catalina','Brisa','Candela','Delfina','Emilia','Florencia','Giuliana','Iara','Julieta','Lara','Malena','Natalia','Olivia','Pilar','Renata','Rocío','Selene','Teodora','Ursula','Violeta','Ximena'],
+      last:   ['González','Rodríguez','Gómez','Fernández','López','Díaz','Martínez','Pérez','García','Sánchez','Romero','Sosa','Torres','Álvarez','Ruiz','Ramírez','Flores','Acosta','Medina','Ríos','Castro','Ortiz','Molina','Morales','Herrera','Suárez','Reyes','Gutiérrez','Luna','Vargas']
+    },
+    'Netherlands': {
+      male:   ['Daan','Sem','Lars','Tim','Thomas','Milan','Jesse','Sander','Liam','Noah','Bram','Cas','Dylan','Finn','Gijs','Hidde','Joost','Kees','Luuk','Maarten','Nico','Piet','Ruben','Stef','Thijs','Victor','Wout','Yannick','Adriaan','Bas'],
+      female: ['Emma','Sophie','Anna','Lotte','Sara','Mila','Nora','Fenna','Julie','Roos','Amber','Bo','Caro','Demi','Eva','Fleur','Gina','Hailey','Isa','Jade','Kim','Lisa','Manon','Nina','Olivia','Pien','Quinn','Stien','Vera','Zoë'],
+      last:   ['de Vries','Janssen','van den Berg','van Dijk','Bakker','Visser','Smit','Meijer','de Boer','Mulder','de Groot','Bos','Vos','Peters','Hendriks','van Leeuwen','Dekker','Brouwer','de Jong','Kok','Vermeer','Linde','Hofman','de Wit','van Beek','Jansen','Claassen','Willems','van der Meer','Boer']
+    },
+    'New Zealand': {
+      male:   ['James','Oliver','Jack','William','Noah','Liam','Mason','Hunter','Logan','Samuel','Arlo','Blake','Connor','Dante','Ethan','Flynn','George','Henry','Isaac','Jaxon','Kai','Leo','Max','Nathan','Ollie','Piripi','River','Sebastian','Tane','Zac'],
+      female: ['Charlotte','Emma','Olivia','Isla','Amelia','Sophie','Lily','Grace','Ella','Isabella','Aroha','Brooklyn','Cleo','Daisy','Evie','Freya','Georgia','Hannah','Indi','Jade','Kate','Lola','Mia','Niamh','Pip','Quinn','Ruby','Summer','Tiana','Willow'],
+      last:   ['Smith','Jones','Williams','Brown','Taylor','Wilson','Martin','Anderson','Thomas','White','Walker','Harris','Clark','Lewis','Robinson','Hall','Young','Moore','Scott','Baker','Thompson','Wright','Lee','Turner','Campbell','Mitchell','Davis','King','Evans','Collins']
+    },
+    'Colombia': {
+      male:   ['Sebastián','Camilo','Felipe','Andrés','Juan','Santiago','Alejandro','David','Diego','Daniel','Bernardo','Carlos','Eduardo','Francisco','Gabriel','Hernán','Iván','Jorge','Kevin','Leonardo','Manuel','Nicolás','Omar','Pablo','Ricardo','Roberto','Sergio','Tomás','Victor','Wilmer'],
+      female: ['Valeria','Daniela','Camila','Juliana','María','Alejandra','Isabella','Mariana','Natalia','Sofía','Andrea','Beatriz','Claudia','Diana','Elena','Fernanda','Gabriela','Ingrid','Jessica','Karen','Laura','Melissa','Natasha','Paola','Rebecca','Sara','Teresa','Valentina','Ximena','Yessica'],
+      last:   ['Rodríguez','Gómez','García','López','Martínez','González','Hernández','Pérez','Sánchez','Ramírez','Torres','Díaz','Vargas','Castro','Morales','Jiménez','Ruiz','Reyes','Cruz','Ríos','Ortega','Medina','Ramos','Suárez','Guerrero','Mendoza','Herrera','Delgado','Vega','Luna']
+    },
+    'Chile': {
+      male:   ['Matías','Tomás','Benjamín','Diego','Felipe','Sebastián','Nicolás','Ignacio','Francisco','Rodrigo','Agustín','Andrés','Bastián','Carlos','Daniel','Eduardo','Fabián','Gonzalo','Hernán','Iñigo','Jorge','Kevin','Leonardo','Mauricio','Nahuel','Oscar','Pablo','Renato','Victor','Waldo'],
+      female: ['Sofía','Valentina','Catalina','Isadora','Florencia','Antonia','Javiera','Camila','Fernanda','Amanda','Belén','Constanza','Daniela','Emilia','Francisca','Gabriela','Ignacia','Josefina','Karla','Loreto','Macarena','Natalia','Oriana','Paola','Raquel','Solange','Trinidad','Ximena','Yasna','Zoe'],
+      last:   ['Muñoz','González','Rojas','Díaz','Pérez','Soto','Contreras','Silva','Martínez','Sepúlveda','Morales','Rodríguez','López','Fuentes','Hernández','Torres','Araya','Flores','Espinoza','Valenzuela','Castillo','Ramírez','Reyes','Gutiérrez','Castro','Vargas','Álvarez','Vásquez','Fernández','Carrasco']
+    },
+    'Portugal': {
+      male:   ['João','Pedro','Miguel','Tiago','André','Diogo','Francisco','Gonçalo','Luís','Nuno','Afonso','Bruno','Carlos','Dinis','Eduardo','Filipe','Henrique','Ivo','Jorge','Leandro','Mário','Nelson','Orlando','Paulo','Ricardo','Rodrigo','Sérgio','Tomás','Vítor','Xavier'],
+      female: ['Maria','Ana','Sofia','Inês','Beatriz','Catarina','Margarida','Rita','Carolina','Francisca','Alice','Bárbara','Clara','Diana','Eduarda','Filipa','Gracinda','Helena','Isabel','Joana','Laura','Marta','Natalina','Olívia','Paula','Raquel','Sara','Teresa','Vera','Zulmira'],
+      last:   ['Silva','Santos','Ferreira','Pereira','Oliveira','Costa','Rodrigues','Martins','Jesus','Sousa','Fernandes','Gonçalves','Lopes','Marques','Alves','Ribeiro','Cardoso','Mendes','Teixeira','Carvalho','Moreira','Correia','Pinto','Barbosa','Andrade','Nunes','Rocha','Miranda','Figueiredo','Guimarães']
+    },
+    'Norway': {
+      male:   ['Oliver','William','Noah','Elias','Magnus','Oskar','Liam','Filip','Emil','Aksel','Anders','Bjørn','Christian','Dag','Eirik','Fredrik','Gunnar','Halvard','Ivar','Jon','Kristian','Lars','Martin','Nikolai','Ole','Pål','Rolf','Sigurd','Tor','Vegard'],
+      female: ['Emma','Nora','Maja','Olivia','Emilie','Sofie','Ingrid','Frida','Astrid','Sigrid','Ane','Berit','Camilla','Dagny','Eli','Guro','Hege','Inger','Kari','Lene','Marit','Nina','Oda','Randi','Silje','Tonje','Unni','Vibeke','Wenche','Ylva'],
+      last:   ['Hansen','Johansen','Olsen','Larsen','Andersen','Nilsen','Jakobsen','Moen','Christoffersen','Pettersen','Eriksen','Berg','Haugen','Hagen','Johannessen','Andreassen','Pedersen','Dahl','Henriksen','Halvorsen','Karlsen','Sørensen','Lie','Sundberg','Lund','Nguyen','Lindberg','Bakke','Strand','Nygaard']
+    },
+    'Denmark': {
+      male:   ['Liam','Noah','Emil','Mikkel','Oliver','Lucas','Oscar','Felix','Elias','Anton','Anders','Bjarne','Christian','Dag','Erik','Frederik','Gunnar','Hans','Ib','Jakob','Klaus','Lars','Mads','Niels','Ole','Poul','Rasmus','Søren','Thomas','Ulrik'],
+      female: ['Emma','Freja','Ella','Ida','Sofia','Clara','Cecilie','Maja','Sara','Alma','Anne','Birthe','Dorthe','Else','Grethe','Hanne','Inga','Johanne','Karen','Lene','Mette','Nina','Oda','Pernille','Rikke','Sine','Tine','Ulla','Vibeke','Winnie'],
+      last:   ['Nielsen','Jensen','Hansen','Pedersen','Andersen','Christensen','Larsen','Sørensen','Rasmussen','Jørgensen','Petersen','Madsen','Kristensen','Olsen','Thomsen','Christiansen','Poulsen','Johansen','Koch','Møller','Mortensen','Eriksen','Clausen','Holm','Simonsen','Lund','Schmidt','Jacobsen','Dahl','Knudsen']
+    },
+    'Belgium': {
+      male:   ['Liam','Noah','Elias','Arthur','Victor','Louis','Remi','Lucas','Axel','Nathan','Alexandre','Baptiste','Christophe','David','Ethan','François','Gilles','Henri','Julien','Kevin','Laurent','Mathieu','Nicolas','Olivier','Philippe','Quentin','Renaud','Stéphane','Thomas','Xavier'],
+      female: ['Emma','Olivia','Nora','Julie','Sarah','Elise','Lina','Sofia','Charlotte','Alice','Amelie','Brigitte','Caroline','Delphine','Elodie','Françoise','Gaëlle','Hanne','Ingrid','Jolien','Karen','Lore','Marie','Nathalie','Petra','Roos','Sofie','Tinne','Valerie','Yasmine'],
+      last:   ['Peeters','Janssen','Maes','Jacobs','Mertens','Willems','Claes','Goossens','Leclercq','Dubois','Lambert','Simon','Laurent','Dupont','Thomas','Lecomte','Renard','Dumont','Piron','Adam','De Smedt','Hermans','Declercq','Bogaert','Verbeke','Lemmens','Aerts','Cools','Vermeulen','Smeets']
+    },
+  };
+
+  // Helper to get name pool for a country (falls back to global pools)
+  function getCountryNamePool(country) {
+    if (!country) return { male: MALE_NAMES, female: FEMALE_NAMES, last: LAST_NAMES };
+    const pool = COUNTRY_NAMES[country.name];
+    if (!pool) return { male: MALE_NAMES, female: FEMALE_NAMES, last: LAST_NAMES };
+    return pool;
+  }
+
+  // ── Countries — doubleSurname marks Spanish-naming tradition, hasRoyalty marks monarchies ──
   const COUNTRIES = [
     { name:'United States',  flag:'US', wealthMod:1.2,  doubleSurname:false },
-    { name:'United Kingdom', flag:'UK', wealthMod:1.1,  doubleSurname:false },
+    { name:'United Kingdom', flag:'UK', wealthMod:1.1,  doubleSurname:false, hasRoyalty:true,  royalMaleName:'Prince',  royalFemaleName:'Princess' },
     { name:'Canada',         flag:'CA', wealthMod:1.1,  doubleSurname:false },
     { name:'Australia',      flag:'AU', wealthMod:1.1,  doubleSurname:false },
     { name:'Germany',        flag:'DE', wealthMod:1.0,  doubleSurname:false },
     { name:'France',         flag:'FR', wealthMod:1.0,  doubleSurname:false },
-    { name:'Japan',          flag:'JP', wealthMod:1.0,  doubleSurname:false },
+    { name:'Japan',          flag:'JP', wealthMod:1.0,  doubleSurname:false, hasRoyalty:true,  royalMaleName:'Prince',  royalFemaleName:'Princess' },
     { name:'Brazil',         flag:'BR', wealthMod:0.8,  doubleSurname:true  },
     { name:'Mexico',         flag:'MX', wealthMod:0.75, doubleSurname:true  },
     { name:'India',          flag:'IN', wealthMod:0.6,  doubleSurname:false },
     { name:'South Africa',   flag:'ZA', wealthMod:0.65, doubleSurname:false },
     { name:'Nigeria',        flag:'NG', wealthMod:0.55, doubleSurname:false },
-    { name:'Sweden',         flag:'SE', wealthMod:1.1,  doubleSurname:false },
-    { name:'Spain',          flag:'ES', wealthMod:0.9,  doubleSurname:true  },
+    { name:'Sweden',         flag:'SE', wealthMod:1.1,  doubleSurname:false, hasRoyalty:true,  royalMaleName:'Prince',  royalFemaleName:'Princess' },
+    { name:'Spain',          flag:'ES', wealthMod:0.9,  doubleSurname:true,  hasRoyalty:true,  royalMaleName:'Infante', royalFemaleName:'Infanta'  },
     { name:'Italy',          flag:'IT', wealthMod:0.9,  doubleSurname:false },
     { name:'South Korea',    flag:'KR', wealthMod:1.0,  doubleSurname:false },
     { name:'China',          flag:'CN', wealthMod:0.85, doubleSurname:false },
     { name:'Argentina',      flag:'AR', wealthMod:0.7,  doubleSurname:true  },
-    { name:'Netherlands',    flag:'NL', wealthMod:1.1,  doubleSurname:false },
+    { name:'Netherlands',    flag:'NL', wealthMod:1.1,  doubleSurname:false, hasRoyalty:true,  royalMaleName:'Prince',  royalFemaleName:'Princess' },
     { name:'New Zealand',    flag:'NZ', wealthMod:1.05, doubleSurname:false },
     { name:'Colombia',       flag:'CO', wealthMod:0.65, doubleSurname:true  },
     { name:'Chile',          flag:'CL', wealthMod:0.75, doubleSurname:true  },
     { name:'Portugal',       flag:'PT', wealthMod:0.85, doubleSurname:true  },
+    { name:'Norway',         flag:'NO', wealthMod:1.15, doubleSurname:false, hasRoyalty:true,  royalMaleName:'Prince',  royalFemaleName:'Princess' },
+    { name:'Denmark',        flag:'DK', wealthMod:1.1,  doubleSurname:false, hasRoyalty:true,  royalMaleName:'Prince',  royalFemaleName:'Princess' },
+    { name:'Belgium',        flag:'BE', wealthMod:1.05, doubleSurname:false, hasRoyalty:true,  royalMaleName:'Prince',  royalFemaleName:'Princess' },
   ];
 
   const WEALTH_CLASSES = [
@@ -73,14 +230,15 @@ const DATA = (() => {
   // Handles both single-surname and double-surname traditions
   function generateFamilyNames(customLastName, country) {
     const useDouble = country && country.doubleSurname;
+    const lastPool  = getCountryNamePool(country).last;
 
     if (useDouble) {
       // Double-surname tradition (Spain, Mexico, etc.)
       // Child surname = paternal_1 + maternal_1
-      const pat1 = customLastName || randomFrom(LAST_NAMES);
-      const pat2 = randomFrom(LAST_NAMES.filter(n => n !== pat1));
-      const mat1 = randomFrom(LAST_NAMES.filter(n => n !== pat1 && n !== pat2));
-      const mat2 = randomFrom(LAST_NAMES.filter(n => n !== mat1 && n !== pat1));
+      const pat1 = customLastName || randomFrom(lastPool);
+      const pat2 = randomFrom(lastPool.filter(n => n !== pat1));
+      const mat1 = randomFrom(lastPool.filter(n => n !== pat1 && n !== pat2));
+      const mat2 = randomFrom(lastPool.filter(n => n !== mat1 && n !== pat1));
       return {
         childSurname: `${pat1} ${mat1}`,
         fatherSurname: `${pat1} ${pat2}`,
@@ -91,8 +249,8 @@ const DATA = (() => {
     } else {
       // Single-surname tradition (US, UK, etc.)
       // Everyone uses the father's last name; mother keeps maiden name
-      const familySurname = customLastName || randomFrom(LAST_NAMES);
-      const motherMaiden  = randomFrom(LAST_NAMES.filter(n => n !== familySurname));
+      const familySurname = customLastName || randomFrom(lastPool);
+      const motherMaiden  = randomFrom(lastPool.filter(n => n !== familySurname));
       return {
         childSurname: familySurname,
         fatherSurname: familySurname,
@@ -1226,6 +1384,13 @@ const DATA = (() => {
     fashion_designer:{ id:'fashion_designer', name:'Fashion Designer', icon:'FD', iconClass:'ic-rose', category:'artistic', desc:'Create clothing people wear.', requirements:{ minAge:20, minLooks:45, minSmarts:35 }, salary:{ base:28000, max:2000000 }, promotions:[{title:'Assistant Designer',salaryMult:1.0,yearsMin:0},{title:'Designer',salaryMult:1.8,yearsMin:3},{title:'Senior Designer',salaryMult:3.0,yearsMin:7},{title:'Fashion Icon',salaryMult:10.0,yearsMin:14}] },
     tattoo_artist:  { id:'tattoo_artist', name:'Tattoo Artist', icon:'TA', iconClass:'ic-orange', category:'artistic', desc:'Permanently ink art on willing humans.', requirements:{ minAge:18, minSmarts:30, minLooks:20 }, salary:{ base:30000, max:200000 }, promotions:[{title:'Apprentice',salaryMult:1.0,yearsMin:0},{title:'Tattoo Artist',salaryMult:1.6,yearsMin:2},{title:'Senior Artist',salaryMult:2.5,yearsMin:6},{title:'Renowned Artist',salaryMult:4.5,yearsMin:12}] },
     dancer:         { id:'dancer', name:'Dancer', icon:'Da', iconClass:'ic-rose', category:'artistic', desc:'Perform dance on stage, screen, or online.', requirements:{ minAge:16, minLooks:45, minHealth:50 }, salary:{ base:15000, max:1000000 }, promotions:[{title:'Student Dancer',salaryMult:1.0,yearsMin:0},{title:'Performing Dancer',salaryMult:2.0,yearsMin:2},{title:'Principal Dancer',salaryMult:4.0,yearsMin:6},{title:'Dance Star',salaryMult:12.0,yearsMin:12}] },
+
+    // Sports
+    footballer:        { id:'footballer',        name:'Footballer',        icon:'⚽', iconClass:'ic-green',  category:'sports', sportKey:'football',   desc:'Play professional football.',            requirements:{ minAge:16, minHealth:60 }, salary:{ base:30000,  max:20000000 }, promotions:[{title:'Youth Player',salaryMult:1.0,yearsMin:0},{title:'Reserve',salaryMult:2.5,yearsMin:2},{title:'First Team',salaryMult:6.0,yearsMin:4},{title:'Star Player',salaryMult:18.0,yearsMin:7},{title:'Club Legend',salaryMult:60.0,yearsMin:12}] },
+    tennis_player:     { id:'tennis_player',     name:'Tennis Player',     icon:'🎾', iconClass:'ic-teal',   category:'sports', sportKey:'tennis',     desc:'Compete on the pro tennis circuit.',      requirements:{ minAge:16, minHealth:55 }, salary:{ base:20000,  max:15000000 }, promotions:[{title:'Tour Qualifier',salaryMult:1.0,yearsMin:0},{title:'Challenger',salaryMult:2.0,yearsMin:2},{title:'Top 50',salaryMult:5.0,yearsMin:4},{title:'Top 10',salaryMult:15.0,yearsMin:7},{title:'Grand Slam Champion',salaryMult:60.0,yearsMin:12}] },
+    basketball_player: { id:'basketball_player', name:'Basketball Player', icon:'🏀', iconClass:'ic-amber',  category:'sports', sportKey:'basketball', desc:'Play pro basketball.',                    requirements:{ minAge:18, minHealth:65 }, salary:{ base:60000,  max:30000000 }, promotions:[{title:'G-League',salaryMult:1.0,yearsMin:0},{title:'Bench Player',salaryMult:3.0,yearsMin:2},{title:'Starter',salaryMult:8.0,yearsMin:4},{title:'All-Star',salaryMult:22.0,yearsMin:7},{title:'Hall of Famer',salaryMult:80.0,yearsMin:14}] },
+    swimmer:           { id:'swimmer',           name:'Swimmer',           icon:'🏊', iconClass:'ic-teal',   category:'sports', sportKey:'swimming',   desc:'Compete in elite swimming.',             requirements:{ minAge:14, minHealth:60 }, salary:{ base:15000,  max:2000000  }, promotions:[{title:'Club Swimmer',salaryMult:1.0,yearsMin:0},{title:'National Qualifier',salaryMult:2.0,yearsMin:2},{title:'National Team',salaryMult:4.0,yearsMin:4},{title:'World Class',salaryMult:10.0,yearsMin:7},{title:'Olympic Legend',salaryMult:30.0,yearsMin:12}] },
+    boxer:             { id:'boxer',             name:'Boxer',             icon:'🥊', iconClass:'ic-rose',   category:'sports', sportKey:'boxing',     desc:'Fight your way to the top.',             requirements:{ minAge:18, minHealth:65 }, salary:{ base:10000,  max:10000000 }, promotions:[{title:'Amateur',salaryMult:1.0,yearsMin:0},{title:'Pro Fighter',salaryMult:3.0,yearsMin:2},{title:'Contender',salaryMult:10.0,yearsMin:4},{title:'Champion',salaryMult:30.0,yearsMin:7},{title:'Legend',salaryMult:100.0,yearsMin:12}] },
   };
 
   const UNIVERSITY_MAJORS = [
@@ -1405,6 +1570,168 @@ const DATA = (() => {
     { id:'take_class',   name:'Online Course',     icon:'OC', iconClass:'ic-blue',   cost:300, desc:'+10 Smarts',                   effects:{ smarts:10 },                  minAge:14 },
   ];
 
+  // ── Creative Project Definitions ───────────────────────────────
+  const CREATIVE_PROJECT_DEFS = {
+    book: {
+      label:'Write a Book', emoji:'📚',
+      genres:['Fiction','Non-Fiction','Thriller','Romance','Sci-Fi','Fantasy','Mystery','Biography','Self-Help','Historical'],
+      scopes:[
+        { id:'short_story', label:'Short Story',  royaltyMod:0.3  },
+        { id:'novel',       label:'Novel',         royaltyMod:1.0  },
+        { id:'epic',        label:'Epic Novel',    royaltyMod:1.8  },
+      ],
+      careers:['novelist','journalist','screenwriter','content_creator'],
+      statKey:'smarts', hobbyKey:'writing',
+      receptionDesc:['Barely noticed','A quiet debut','A solid read','A bestseller','A literary masterpiece'],
+      titleWords:{ pre:['The Last','A Silent','The Golden','Lost in','The Infinite','Dark','The Broken','Wild','The Secret','After'],
+                   suf:['Summer','Storm','Echo','Dream','Shadow','Hours','Road','Heart','Sky','Night','Garden','Promise'] },
+    },
+    song: {
+      label:'Release Music', emoji:'🎵',
+      genres:['Pop','Hip-Hop','R&B','Rock','Electronic','Jazz','Country','Indie','Latin','Classical'],
+      scopes:[
+        { id:'single', label:'Single',          royaltyMod:0.4 },
+        { id:'ep',     label:'EP (5 tracks)',   royaltyMod:1.0 },
+        { id:'album',  label:'Album',           royaltyMod:2.2 },
+      ],
+      careers:['musician','music_producer','content_creator','dancer'],
+      statKey:'smarts', hobbyKey:'music',
+      receptionDesc:['Forgettable','Growing fanbase','A solid hit','Chart-topper','Generation-defining anthem'],
+      titleWords:{ pre:['Late Night','Sweet','Cold','Midnight','Electric','Neon','Faded','Golden','Wild','Forever'],
+                   suf:['Dance','Lover','Fire','Rain','Nights','Dream','Wave','Star','Heat','Soul'] },
+    },
+    film: {
+      label:'Make a Film', emoji:'🎬',
+      genres:['Drama','Comedy','Action','Horror','Sci-Fi','Romance','Documentary','Thriller','Animation','Crime'],
+      scopes:[
+        { id:'short',   label:'Short Film',    royaltyMod:0.35 },
+        { id:'indie',   label:'Indie Film',    royaltyMod:1.0  },
+        { id:'feature', label:'Feature Film',  royaltyMod:2.5  },
+      ],
+      careers:['filmmaker','actor','screenwriter'],
+      statKey:'smarts', hobbyKey:'filmmaking',
+      receptionDesc:['A box-office flop','A cult classic','Critically acclaimed','Award-winning','A cinematic masterpiece'],
+      titleWords:{ pre:['The Last','Beyond','Into the','Before the','The','Shattered','Running from','Among the','The Dark'],
+                   suf:['Sunrise','City','Horizon','Storm','Edge','Light','Silence','Mirror','Fire','Abyss'] },
+    },
+    play: {
+      label:'Stage a Play', emoji:'🎭',
+      genres:['Drama','Comedy','Musical','Tragedy','Experimental','Thriller','Romance'],
+      scopes:[
+        { id:'local',    label:'Local Theater',      royaltyMod:0.3 },
+        { id:'regional', label:'Regional Run',       royaltyMod:1.0 },
+        { id:'broadway', label:'Broadway / West End',royaltyMod:2.5 },
+      ],
+      careers:['actor','comedian','voice_actor'],
+      statKey:'looks', hobbyKey:'theater',
+      receptionDesc:['Mixed reviews','A modest run','Standing ovations','Sold-out season','Tony Award winner'],
+      titleWords:{ pre:['The','A Night in','When','After','The Last','Between','One','The','Shadows of'],
+                   suf:['Rain','Summer','Wings','Curtain','Stage','Voice','Memory','Silence','Act','Fortune'] },
+    },
+    series: {
+      label:'Launch a Series', emoji:'📺',
+      genres:['Lifestyle','Comedy','Drama','Tutorial','Reality','Travel','Gaming','Fashion','True Crime'],
+      scopes:[
+        { id:'mini',      label:'Mini-Series (3 ep)',   royaltyMod:0.4 },
+        { id:'season',    label:'Full Season (8 ep)',   royaltyMod:1.0 },
+        { id:'franchise', label:'Long-Running Series',  royaltyMod:2.0 },
+      ],
+      careers:['content_creator','comedian','filmmaker','actor'],
+      statKey:'looks', hobbyKey:'filmmaking',
+      receptionDesc:['Flopped','Niche following','Fan favourite','Viral series','Cultural phenomenon'],
+      titleWords:{ pre:['Keeping Up','Living','Real','The','Simply','Unfiltered','Getting'],
+                   suf:['With Me','Life','Vibes','Days','Stories','Honestly','Raw','Together'] },
+    },
+    collection: {
+      label:'Release a Collection', emoji:'🎨',
+      genres:['Abstract','Portrait','Landscape','Street Art','Digital','Fashion','Photography','Sculpture'],
+      scopes:[
+        { id:'small',      label:'Small Collection',  royaltyMod:0.4 },
+        { id:'gallery',    label:'Gallery Show',      royaltyMod:1.0 },
+        { id:'exhibition', label:'Major Exhibition',  royaltyMod:2.0 },
+      ],
+      careers:['visual_artist','graphic_designer','fashion_designer','tattoo_artist','photographer'],
+      statKey:'looks', hobbyKey:'drawing',
+      receptionDesc:['Overlooked','Gallery darling','Critically praised','Sold out opening','Historic masterwork'],
+      titleWords:{ pre:['Shades of','Forms in','The','Between','Broken','Woven','Light Through','Echoes of'],
+                   suf:['Colour','Space','Time','Silence','Motion','Glass','Stone','Water','Skin'] },
+    },
+    performance: {
+      label:'Choreograph a Show', emoji:'💃',
+      genres:['Ballet','Contemporary','Hip-Hop','Latin','Ballroom','Jazz','Street','Fusion'],
+      scopes:[
+        { id:'local',    label:'Local Show',    royaltyMod:0.3 },
+        { id:'national', label:'National Tour', royaltyMod:1.0 },
+        { id:'world',    label:'World Tour',    royaltyMod:2.5 },
+      ],
+      careers:['dancer'],
+      statKey:'health', hobbyKey:'dance',
+      receptionDesc:['A decent show','Audience loved it','Rave reviews','Sold-out world tour','A legendary performance'],
+      titleWords:{ pre:['In','Moving','The','Pulse','Fluid','Rise','Between'],
+                   suf:['Motion','Rhythm','Waves','Fire','Bodies','Time','Light','Ground'] },
+    },
+  };
+
+  // ── Sport Definitions ───────────────────────────────────────────
+  const SPORT_DEFS = {
+    football:   {
+      label:'Football', icon:'⚽',
+      gamesPerSeason:38,
+      positions:['Striker','Midfielder','Defender','Goalkeeper'],
+      championships:[
+        { name:'League Title',       winsMin:25 },
+        { name:'Cup Final',          winsMin:20 },
+        { name:'Champions League',   winsMin:30 },
+        { name:'World Cup',          winsMin:34 },
+      ],
+    },
+    tennis:     {
+      label:'Tennis', icon:'🎾',
+      gamesPerSeason:20,
+      positions:['Player'],
+      championships:[
+        { name:'Australian Open',  winsMin:7  },
+        { name:'French Open',      winsMin:8  },
+        { name:'Wimbledon',        winsMin:8  },
+        { name:'US Open',          winsMin:8  },
+        { name:'World No.1',       winsMin:18 },
+      ],
+    },
+    basketball: {
+      label:'Basketball', icon:'🏀',
+      gamesPerSeason:82,
+      positions:['Point Guard','Shooting Guard','Small Forward','Power Forward','Center'],
+      championships:[
+        { name:'All-Star Selection',    winsMin:40 },
+        { name:'Conference Finals',     winsMin:50 },
+        { name:'NBA Championship',      winsMin:55 },
+        { name:'Finals MVP',            winsMin:58 },
+      ],
+    },
+    swimming:   {
+      label:'Swimming', icon:'🏊',
+      gamesPerSeason:12,
+      positions:['Freestyle','Backstroke','Breaststroke','Butterfly','Medley'],
+      championships:[
+        { name:'National Championship', winsMin:7  },
+        { name:'World Championships',   winsMin:9  },
+        { name:'Olympic Gold',          winsMin:11 },
+        { name:'World Record',          winsMin:12 },
+      ],
+    },
+    boxing:     {
+      label:'Boxing', icon:'🥊',
+      gamesPerSeason:4,
+      positions:['Lightweight','Welterweight','Middleweight','Heavyweight'],
+      championships:[
+        { name:'Regional Title',        winsMin:2 },
+        { name:'National Title',        winsMin:3 },
+        { name:'World Title Fight',     winsMin:4 },
+        { name:'Undisputed Champion',   winsMin:4 },
+      ],
+    },
+  };
+
   const ACHIEVEMENTS = [
     { id:'centenarian',      name:'Centenarian',       desc:'Live to age 100.' },
     { id:'millionaire',      name:'Millionaire',       desc:'Accumulate $1,000,000.' },
@@ -1431,9 +1758,10 @@ const DATA = (() => {
   // ── Helpers ────────────────────────────────────────────────────
   function randomFrom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
-  function randomName(gender) {
-    const first = randomFrom(gender === 'female' ? FEMALE_NAMES : MALE_NAMES);
-    const last  = randomFrom(LAST_NAMES);
+  function randomName(gender, country = null) {
+    const pool  = getCountryNamePool(country);
+    const first = randomFrom(gender === 'female' ? pool.female : pool.male);
+    const last  = randomFrom(pool.last);
     return { first, last, full: `${first} ${last}` };
   }
 
@@ -1555,12 +1883,20 @@ const DATA = (() => {
     return sign + '$' + Math.round(abs).toLocaleString();
   }
 
+  function randomProjectTitle(type) {
+    const def = CREATIVE_PROJECT_DEFS[type];
+    if (!def || !def.titleWords) return 'Untitled';
+    const { pre, suf } = def.titleWords;
+    return `${randomFrom(pre)} ${randomFrom(suf)}`;
+  }
+
   return {
     MALE_NAMES, FEMALE_NAMES, LAST_NAMES, COUNTRIES, WEALTH_CLASSES,
     EVENTS, CAREERS, HOBBIES, EXTRACURRICULARS, UNIVERSITY_MAJORS, TRADE_CERTIFICATES, ACTIVITIES, ACHIEVEMENTS,
     SEXUALITIES, GENDER_IDENTITIES,
     ITEMS, PETS, TRAVEL_DESTINATIONS, SIDE_HUSTLES, MOODS, HEALTH_CONDITIONS, BUCKET_GOALS, STYLES,
-    generateFamilyNames,
+    CREATIVE_PROJECT_DEFS, SPORT_DEFS,
+    generateFamilyNames, getCountryNamePool, randomProjectTitle,
     randomFrom, randomName, randomCountry, randomWealthClass, randomTraits,
     getStage, filterEvents, getCareer, getAllCareers, getActivities, getHobby, getAllHobbies,
     getExtracurricular, getAllExtracurriculars, getAttractedGender,
