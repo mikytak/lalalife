@@ -189,6 +189,18 @@ const Engine = (() => {
     processMilitary(c);
     c.negotiatedThisYear = false; // reset each year
 
+    // ── Allowance (under 18, living parents) ────────────────────
+    if (c.age < 18) {
+      const livingParents = g.relationships.filter(r => (r.subtype==='father'||r.subtype==='mother') && r.status==='active');
+      if (livingParents.length > 0) {
+        const avgParentRel = livingParents.reduce((s,p)=>s+p.relationship,0) / livingParents.length;
+        // Allowance scales with parent bond: $5–$50/yr
+        const allowance = Math.round((5 + (avgParentRel / 100) * 45) / 5) * 5;
+        c.money += allowance;
+        State.addLog(c.age, `Received $${allowance} allowance from your parents.`, 'good');
+      }
+    }
+
     const stage = DATA.getStage(c.age);
     const maxEv = stage === 'infant' ? 1 : stage === 'child' ? 2 : 3;
     const evCount = Math.floor(Math.random() * (maxEv + 1));
@@ -1155,18 +1167,53 @@ const Engine = (() => {
   }
 
   function seduceProfessor() {
-    const c = State.getChar();
+    const g = State.get(); const c = g.character;
     if (c.age < 18 || !c.education.inSchool) return { ok:false, msg:'Only at university.' };
     if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
-    const roll = Math.random();
+
+    // Check existing professor relationship
+    const profRel = g.relationships.find(r => r.subtype === 'professor' && r.status === 'active');
     spendEnergy();
-    if (roll < 0.2) {
-      // Big success — inappropriate but game
-      State.applyEffects({ smarts:5, happiness:10 });
-      State.addLog(c.age, 'The professor was... receptive. Grade improved significantly.', 'event');
+
+    if (profRel) {
+      // Deepening existing relationship
+      profRel.relationship = Math.min(100, profRel.relationship + 12);
+      const r = profRel.relationship;
+      if (r >= 80 && profRel.type === 'friend') {
+        // Graduate to romantic partner
+        const relStyle = c.relationshipStyle || 'monogamous';
+        const hasPartner = State.getPartner();
+        if (hasPartner && relStyle !== 'polyamorous') {
+          State.applyEffects({ happiness:5 });
+          State.addLog(c.age, `Spent time with Prof. ${profRel.name}. Feelings are mutual but you're taken.`, 'rel');
+          State.saveGame();
+          return { ok:true, msg:`Prof. ${profRel.name} has real feelings for you… but you're already in a relationship.` };
+        }
+        profRel.type = 'partner'; profRel.subtype = 'partner';
+        State.applyEffects({ happiness:20 });
+        State.addLog(c.age, `Started a secret relationship with Prof. ${profRel.name}. 💕`, 'rel');
+        State.saveGame();
+        return { ok:true, msg:`Prof. ${profRel.name} confesses feelings. You're officially together — secretly! 💕`, newLover:true };
+      }
+      State.applyEffects({ happiness:8 });
+      State.addLog(c.age, `Flirted with Prof. ${profRel.name}. Getting closer (${profRel.relationship}% bond).`, 'rel');
       State.saveGame();
-      return { ok:true, msg:'It worked. Questionably, but it worked. Grade boosted!' };
-    } else if (roll < 0.6) {
+      return { ok:true, msg:`Things are heating up with Prof. ${profRel.name}. Bond: ${profRel.relationship}%.` };
+    }
+
+    // First attempt
+    const roll = Math.random();
+    if (roll < 0.30) {
+      // Receptive — adds them as a "professor" relationship to pursue
+      const gen = DATA.getAttractedGender(c.gender, c.sexuality) || (c.gender==='male'?'female':'male');
+      const nm  = DATA.randomName(gen);
+      const profAge = c.age + Math.floor(Math.random()*15) + 8; // 8–22 years older
+      State.addRelationship({ name:`Prof. ${nm.last || nm.full.split(' ')[1] || nm.full}`, type:'friend', subtype:'professor', age:profAge, relationship:45, traits:DATA.randomTraits(2), status:'active' });
+      State.applyEffects({ smarts:4, happiness:10 });
+      State.addLog(c.age, 'The professor seemed intrigued. Something sparked.', 'rel');
+      State.saveGame();
+      return { ok:true, msg:'The professor seemed… intrigued. Check Relationships to keep pursuing them! 👀', sparked:true };
+    } else if (roll < 0.65) {
       State.applyEffects({ happiness:-10, smarts:-5 });
       State.addLog(c.age, 'Professor rejected the advance and reported it. Scandalous.', 'bad');
       State.saveGame();

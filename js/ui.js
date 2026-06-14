@@ -1210,7 +1210,7 @@ const UI = (() => {
         const active = rel.status === 'active';
         const card = document.createElement('div');
         card.className = `item-card${active ? ' clickable' : ' rel-dead'}`;
-        const iconMap = { father:'Fa', mother:'Mo', sibling:'Si', child:'Ch', friend:'Fr', crush:'Cr', partner:'Pa', spouse:'Sp', ex:'Ex' };
+        const iconMap = { father:'Fa', mother:'Mo', sibling:'Si', child:'Ch', friend:'Fr', crush:'Cr', partner:'Pa', spouse:'Sp', ex:'Ex', professor:'Pr' };
         const icon = iconMap[rel.subtype] || '??';
         const inCircle = c.socialCircle.includes(rel.id);
         const isRomantic = rel.type === 'partner';
@@ -1791,7 +1791,13 @@ const UI = (() => {
       }
       if (edu.inSchool && c.age >= 18) {
         studyActions.push({ label:'Cram All Night',   sub:`+10–18 Smarts, -Health & Happiness · 1 energy`, fn: () => Engine.cramAllNight(),      energy:true });
-        studyActions.push({ label:'Seduce the Professor', sub:`Very risky. Could backfire badly · 1 energy`, fn: () => Engine.seduceProfessor(), energy:true });
+        const hasProfCrush = State.get().relationships.some(r => r.subtype==='professor' && r.status==='active');
+        studyActions.push({ label: hasProfCrush ? '💕 Keep Pursuing the Professor' : 'Flirt with the Professor', sub: hasProfCrush ? 'Build the bond — maybe they\'ll fall for you · 1 energy' : 'Risky! Could spark romance or backfire badly · 1 energy', fn: () => {
+          const r = Engine.seduceProfessor();
+          showToast(r.msg, r.scandal ? 'bad' : r.sparked || r.newLover ? 'good' : r.ok ? 'info' : 'bad');
+          updateDisplay(); renderEducation(); renderRelationships();
+          return r;
+        }, energy:true, customToast:true });
         studyActions.push({ label:'Cheat on Exam',    sub:`Risky! Could get expelled · free`,    fn: () => Engine.cheatOnExam(),        energy:false });
       }
       // College social life
@@ -1810,7 +1816,7 @@ const UI = (() => {
         if (!disabled) {
           card.addEventListener('click', () => {
             const r = act.fn();
-            showToast(r.msg, r.caught || r.scandal || r.rejected ? 'bad' : 'good');
+            if (!act.customToast) showToast(r.msg, r.caught || r.scandal || r.rejected ? 'bad' : 'good');
             if (r.ok) { updateDisplay(); renderEducation(); }
           });
         }
