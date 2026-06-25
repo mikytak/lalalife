@@ -170,6 +170,8 @@
       <span id="ageup-next" class="ageup-next">1</span>
     </button>
     <button class="btn btn-nav" data-modal="activities">Do<br><small>Activities</small><span class="nav-badge" id="badge-activities" style="display:none"></span></button>
+    <button class="btn btn-nav" data-modal="fame">Fame<br><small>Spotlight</small><span class="nav-badge" id="badge-fame" style="display:none"></span></button>
+    <button class="btn btn-nav" data-modal="socialmedia">Social<br><small>Media</small><span class="nav-badge" id="badge-socialmedia" style="display:none"></span></button>
     <button class="btn btn-nav" data-modal="relationships">People<br><small>Relations</small><span class="nav-badge" id="badge-relationships" style="display:none"></span></button>
     <button class="btn btn-nav" data-modal="hobbies">Hobbies<br><small>Skills</small><span class="nav-badge" id="badge-hobbies" style="display:none"></span></button>
     <button class="btn btn-nav" data-modal="career">Work<br><small>Career</small><span class="nav-badge" id="badge-career" style="display:none"></span></button>
@@ -193,6 +195,7 @@
     <div id="death-highlights" class="death-highlights"></div>
     <div id="death-achievements" class="death-achievements"></div>
     <div id="cheats-watermark" class="cheats-watermark hidden">Cheats were used</div>
+    <div id="descendant-options" class="descendant-options" style="display:none"></div>
     <div class="death-actions">
       <button class="btn btn-primary btn-lg" id="btn-new-life-2">New Life</button>
       <button class="btn btn-ghost btn-lg" onclick="UI.showScreen('intro')">Main Menu</button>
@@ -251,6 +254,28 @@
       <button class="close-btn" data-close="hobbies">x</button>
     </div>
     <div id="hobbies-content" class="modal-body"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ FAME MODAL ═══════════════════════ -->
+<div id="modal-fame" class="overlay hidden">
+  <div class="modal modal-tall">
+    <div class="modal-hdr">
+      <h3>⭐ Fame & Spotlight</h3>
+      <button class="close-btn" data-close="fame">x</button>
+    </div>
+    <div id="fame-content" class="modal-body"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ SOCIAL MEDIA MODAL ═══════════════════════ -->
+<div id="modal-socialmedia" class="overlay hidden">
+  <div class="modal modal-tall">
+    <div class="modal-hdr">
+      <h3>📱 Social Media</h3>
+      <button class="close-btn" data-close="socialmedia">x</button>
+    </div>
+    <div id="socialmedia-content" class="modal-body"></div>
   </div>
 </div>
 

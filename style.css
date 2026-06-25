@@ -585,6 +585,7 @@ html, body {
 }
 .death-actions { display: flex; gap: 10px; width: 100%; margin-top: 6px; }
 .death-actions .btn { flex: 1; }
+.descendant-options { width:100%; margin:12px 0 4px; padding:12px; background:linear-gradient(135deg,#f0fdf4,#dcfce7); border:1.5px solid #86efac; border-radius:12px; }
 
 /* ─── OVERLAYS & MODALS ──────────────────────────────────────── */
 .overlay {

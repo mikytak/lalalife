@@ -36,10 +36,10 @@ const Engine = (() => {
   }
 
   // ── Create a character with optional customization ─────────────
-  function createCharacter({ firstName, lastName, country, gender, sexuality, specialBirth } = {}) {
+  function createCharacter({ firstName, lastName, country, gender, sexuality, specialBirth, wealthClass, startMoney, isDescendant, ancestorName } = {}) {
     const resolvedGender  = (gender === 'random' || !gender) ? (Math.random() < 0.5 ? 'female' : 'male') : gender;
     const resolvedCountry = country || DATA.randomCountry();
-    const wealth          = DATA.randomWealthClass();
+    const wealth          = wealthClass ? (DATA.WEALTH_CLASSES.find(w => w.id === wealthClass) || DATA.randomWealthClass()) : DATA.randomWealthClass();
 
     const rnd = (base, spread) => State.clampStat(base + (Math.random() * spread * 2) - spread);
     const smarts    = rnd(50, 20) + wealth.startBonus;
@@ -70,7 +70,9 @@ const Engine = (() => {
       smarts:    State.clampStat(smarts    + (legBonus.smarts    || 0)),
       looks:     State.clampStat(looks     + (legBonus.looks     || 0)),
       fame: 0,
-      money: Math.round(wealth.startMoney * (0.8 + Math.random() * 0.4) * resolvedCountry.wealthMod) + (legBonus.money || 0),
+      money: startMoney !== undefined ? startMoney : Math.round(wealth.startMoney * (0.8 + Math.random() * 0.4) * resolvedCountry.wealthMod) + (legBonus.money || 0),
+      isDescendant: isDescendant || false,
+      ancestorName: ancestorName || null,
       education: { level:'none', major:null, institution:null, gpa:2.5, studentLoan:0, certificates:[], inSchool:false, schoolType:null, schoolYear:0, schoolDuration:0, pendingCert:null },
       career: { jobId:null, title:null, salary:0, yearsAtJob:0, promotionLevel:0, performance:70, retired:false },
       assets: { houses:[], cars:[], investments:0 },
@@ -186,6 +188,7 @@ const Engine = (() => {
     checkStockMarket(c);
     checkExReturns(c, g);
     checkFriendEnemy(g);
+    checkGrandchildren(c, g);
     processMilitary(c);
     c.negotiatedThisYear = false; // reset each year
 
@@ -1465,6 +1468,57 @@ const Engine = (() => {
     return { ok:true, msg:`Quality time with ${c.pet.name}. Happiness up!` };
   }
 
+  function groomPet() {
+    const c = State.getChar();
+    if (!c.pet || !c.pet.alive) return { ok:false, msg:'No pet.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left.' };
+    const cost = 40;
+    if (c.money < cost) return { ok:false, msg:`Need $${cost} for grooming.` };
+    c.money -= cost;
+    c.pet.health = Math.min(100, (c.pet.health||100) + 10);
+    State.applyEffects({ happiness:6 });
+    spendEnergy();
+    State.addLog(c.age, `Groomed ${c.pet.name}. Looking fresh! 🛁`, 'activity');
+    State.saveGame();
+    return { ok:true, msg:`${c.pet.name} is squeaky clean and loving it!` };
+  }
+
+  function trainPet() {
+    const c = State.getChar();
+    if (!c.pet || !c.pet.alive) return { ok:false, msg:'No pet.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left.' };
+    if (c.pet.type === 'fish' || c.pet.type === 'turtle') return { ok:false, msg:`${c.pet.name} isn't really trainable.` };
+    c.pet.skillLevel = Math.min(100, (c.pet.skillLevel||0) + Math.floor(Math.random()*10)+5);
+    State.applyEffects({ happiness:8 });
+    spendEnergy();
+    State.addLog(c.age, `Trained ${c.pet.name}. Skill: ${c.pet.skillLevel}/100 🎾`, 'activity');
+    State.saveGame();
+    return { ok:true, msg:`${c.pet.name} learned something new! Training level: ${c.pet.skillLevel}` };
+  }
+
+  function walkPet() {
+    const c = State.getChar();
+    if (!c.pet || !c.pet.alive) return { ok:false, msg:'No pet.' };
+    if (!hasEnergy()) return { ok:false, msg:'No energy left.' };
+    if (c.pet.type !== 'dog') return { ok:false, msg:`You can't really walk a ${DATA.getPet(c.pet.type)?.name}.` };
+    State.applyEffects({ happiness:10, health:3, mentalHealth:5 });
+    spendEnergy();
+    State.addLog(c.age, `Went on a walk with ${c.pet.name}. 🐕`, 'activity');
+    State.saveGame();
+    return { ok:true, msg:`Great walk with ${c.pet.name}! Both feeling great.` };
+  }
+
+  function renamePet(newName) {
+    const c = State.getChar();
+    if (!c.pet || !c.pet.alive) return { ok:false, msg:'No pet.' };
+    if (!newName || !newName.trim()) return { ok:false, msg:'Enter a name.' };
+    const old = c.pet.name;
+    c.pet.name = newName.trim();
+    State.addLog(c.age, `Renamed ${old} to ${c.pet.name}.`, 'activity');
+    State.saveGame();
+    return { ok:true, msg:`Now called ${c.pet.name}!` };
+  }
+
   function processPetAging(c, g) {
     if (!c.pet || !c.pet.alive) return;
     const def = DATA.getPet(c.pet.type);
@@ -1570,13 +1624,14 @@ const Engine = (() => {
       if (Math.random() < deathChance) {
         rel.status = 'deceased';
         // Inheritance scales with wealth class
-        const inhRanges = { impoverished:[500,5000], lower_class:[2000,15000], middle_class:[10000,80000], upper_class:[50000,300000], wealthy:[200000,1500000] };
-        const [inhLo, inhHi] = inhRanges[c.wealthClass] || inhRanges.middle_class;
+        const inhRanges = { impoverished:[500,5000], lower:[2000,15000], middle:[10000,80000], 'upper-middle':[50000,300000], wealthy:[200000,1500000], 'ultra-rich':[500000,5000000] };
+        const [inhLo, inhHi] = inhRanges[c.wealthClass] || inhRanges.middle;
         const inheritance = Math.round(inhLo + Math.random() * (inhHi - inhLo));
         c.money += inheritance;
-        State.applyEffects({ happiness:-20, mentalHealth:-15 });
+        State.applyEffects({ happiness:-25, mentalHealth:-20 });
         State.addLog(c.age, `${rel.name} passed away at age ${pAge}. You inherited ${DATA.fmtMoney(inheritance)}.`, 'bad');
-        UI.showToast(`${rel.name} has passed away. They will always be in your heart.`, 'bad');
+        const parentType = rel.subtype === 'father' ? 'Father' : 'Mother';
+        UI.showLifeMoment('🕯️', `${parentType} Gone`, `${rel.name} passed away at ${pAge}. Inherited ${DATA.fmtMoney(inheritance)}.`, 'default');
       }
     });
   }
@@ -2135,6 +2190,43 @@ const Engine = (() => {
   }
 
   // ── Legacy system ─────────────────────────────────────────────
+  // ── Descendant life ───────────────────────────────────────────
+  function getDescendants() {
+    const g = State.get();
+    if (!g || !g.relationships) return [];
+    return g.relationships.filter(r => (r.subtype === 'child' || r.subtype === 'grandchild') && r.status === 'active');
+  }
+
+  function createDescendantCharacter(relId) {
+    const g = State.get();
+    const c = g.character;
+    const descendant = g.relationships.find(r => r.id === relId);
+    if (!descendant) return null;
+
+    // Determine gender
+    const gen = Math.random() < 0.5 ? 'male' : 'female';
+    const country = DATA.COUNTRIES.find(co => co.name === c.country) || DATA.COUNTRIES[0];
+    const pool  = DATA.getCountryNamePool(country);
+    const firstName = DATA.randomFrom(gen === 'female' ? pool.female : pool.male);
+    const lastName  = c.lastName; // carry the family name
+
+    // Inherit some wealth
+    const netWorth = Math.max(0, c.money + (c.assets?.savings||0));
+    const startMoney = Math.round(netWorth * 0.3 + 1000); // child inherits 30%
+
+    const opts = {
+      firstName, lastName,
+      gender: gen,
+      country: c.country,
+      sexuality: 'straight',
+      wealthClass: c.wealthClass,
+      startMoney,
+      isDescendant: true,
+      ancestorName: `${c.firstName} ${c.lastName}`,
+    };
+    return opts;
+  }
+
   const LEGACY_KEY = 'lalalife_legacy';
 
   function loadLegacy() {
@@ -2689,6 +2781,27 @@ const Engine = (() => {
     }
   }
 
+  // ── Grandchildren ────────────────────────────────────────────
+  function checkGrandchildren(c, g) {
+    const children = g.relationships.filter(r => r.subtype === 'child' && r.status === 'active');
+    children.forEach(child => {
+      // Children 22+ have a small yearly chance of having a baby
+      if (child.age < 22) return;
+      if (Math.random() > 0.06) return; // ~6% per year per child
+      const country = DATA.COUNTRIES.find(co => co.name === c.country) || null;
+      const pool  = DATA.getCountryNamePool(country);
+      const gcGen = Math.random() < 0.5 ? 'female' : 'male';
+      const gcName = DATA.randomFrom(gcGen === 'female' ? pool.female : pool.male);
+      const gcFull = `${gcName} ${c.lastName}`; // grandchild takes family surname
+      const existing = g.relationships.filter(r => r.subtype === 'grandchild');
+      if (existing.some(r => r.parentId === child.id)) return; // one per child for simplicity
+      State.addRelationship({ name:gcFull, type:'family', subtype:'grandchild', age:0, relationship:70, traits:DATA.randomTraits(2), status:'active', parentId:child.id });
+      State.applyEffects({ happiness:15 });
+      State.addLog(c.age, `${child.name} had a baby! Welcome to the family, ${gcFull}! 👶`, 'rel');
+      UI.showLifeMoment('🥰', 'Grandparent!', `${child.name} had ${gcFull}. The family keeps growing!`, 'grandparent');
+    });
+  }
+
   // ── Special death ribbons ────────────────────────────────────
   function getDeathRibbon(c, g, cause) {
     if (c.age >= 100) return { ribbon:'Centenarian', desc:'Lived a full century.' };
@@ -3049,6 +3162,86 @@ const Engine = (() => {
     }
   }
 
+  // ── Fame actions ─────────────────────────────────────────────
+  function doFameAction(actionId) {
+    const c = State.getChar();
+    if (!hasEnergy()) return { ok:false, msg:'No energy left. Age up to rest.' };
+    const fame = c.fame || 0;
+    spendEnergy();
+    switch(actionId) {
+      case 'interview': {
+        const gain = Math.floor(3 + Math.random()*8);
+        const hap  = Math.random() < 0.3 ? -5 : 8;
+        c.fame = Math.min(100, fame + gain);
+        State.applyEffects({ happiness:hap });
+        const msg = hap > 0 ? `Great interview! +${gain} fame.` : `Interview was tough. +${gain} fame but drained.`;
+        State.addLog(c.age, `Did a press interview. Fame now ${c.fame}.`, 'activity');
+        State.saveGame();
+        return { ok:true, msg };
+      }
+      case 'endorsement': {
+        if (fame < 20) return { ok:false, msg:'Need at least 20 fame for endorsements.' };
+        const deal = Math.round(5000 + fame * 500 + Math.random() * 20000);
+        c.money += deal;
+        c.fame = Math.min(100, fame + 3);
+        State.addLog(c.age, `Signed an endorsement deal. Earned ${DATA.fmtMoney(deal)}.`, 'career');
+        State.saveGame();
+        return { ok:true, msg:`Endorsement deal signed! Earned ${DATA.fmtMoney(deal)}.` };
+      }
+      case 'tour': {
+        if (fame < 30) return { ok:false, msg:'Need at least 30 fame to go on tour.' };
+        const earn = Math.round(10000 + fame * 800 + Math.random() * 50000);
+        const famGain = Math.floor(5 + Math.random() * 10);
+        c.money += earn;
+        c.fame = Math.min(100, fame + famGain);
+        State.applyEffects({ happiness:15, health:-5 });
+        State.addLog(c.age, `Went on tour. Earned ${DATA.fmtMoney(earn)}, +${famGain} fame.`, 'career');
+        State.saveGame();
+        return { ok:true, msg:`Tour was a success! +${DATA.fmtMoney(earn)} and +${famGain} fame.` };
+      }
+      case 'charity_event': {
+        const cost = 2000;
+        if (c.money < cost) return { ok:false, msg:`Need ${DATA.fmtMoney(cost)} to host.` };
+        c.money -= cost;
+        const famGain = Math.floor(4 + Math.random() * 6);
+        c.fame = Math.min(100, fame + famGain);
+        State.applyEffects({ happiness:12, mentalHealth:8 });
+        State.addLog(c.age, `Hosted a charity event. +${famGain} fame, great PR.`, 'activity');
+        State.saveGame();
+        return { ok:true, msg:`Charity event was a hit! +${famGain} fame and +Happiness.` };
+      }
+      case 'scandal_pr': {
+        if (fame < 10) return { ok:false, msg:'Not famous enough to have a scandal.' };
+        const roll = Math.random();
+        if (roll < 0.4) {
+          c.fame = Math.min(100, fame + 8);
+          State.applyEffects({ happiness:5 });
+          State.addLog(c.age, 'Manufactured a scandal for attention. It worked!', 'event');
+          State.saveGame();
+          return { ok:true, msg:'The internet is talking about you! +8 fame.' };
+        } else {
+          c.fame = Math.max(0, fame - 10);
+          State.applyEffects({ happiness:-15, mentalHealth:-10 });
+          State.addLog(c.age, 'Attempted a PR scandal. Backfired badly. Fame hit.', 'bad');
+          State.saveGame();
+          return { ok:true, msg:'That backfired. People are NOT happy. -10 fame.', bad:true };
+        }
+      }
+      case 'award_show': {
+        if (fame < 40) return { ok:false, msg:'Need 40 fame to attend award shows.' };
+        const wins = Math.random() < (fame / 150);
+        const famGain = wins ? Math.floor(8 + Math.random()*8) : Math.floor(2 + Math.random()*4);
+        c.fame = Math.min(100, fame + famGain);
+        State.applyEffects({ happiness: wins ? 20 : 8 });
+        const msg = wins ? `You won an award! +${famGain} fame. 🏆` : `Great night at the award show. +${famGain} fame.`;
+        State.addLog(c.age, msg, wins ? 'good' : 'activity');
+        State.saveGame();
+        return { ok:true, msg, won:wins };
+      }
+      default: return { ok:false, msg:'Unknown action.' };
+    }
+  }
+
   // ── Aging parent care ─────────────────────────────────────────
   function careForParent(relId) {
     const g = State.get(); const c = g.character;
@@ -3234,8 +3427,9 @@ const Engine = (() => {
     socializeAtSchool, meetRomanticInterest,
     studyHard, skipClass, kissUpTeacher, flirtWithClassmate,
     cramAllNight, seduceProfessor, cheatOnExam,
-    adoptPet, vetPet, playWithPet,
-    doSocialMedia, doSideHustle, travel,
+    adoptPet, vetPet, playWithPet, groomPet, trainPet, walkPet, renamePet,
+    getDescendants, createDescendantCharacter,
+    doSocialMedia, doFameAction, doSideHustle, travel,
     triggerMood, manageCondition,
     addToCircle, removeFromCircle, groupHangout, familyHangout, groupTrip,
     browseOnlineDating, browseRaya, connectWithMatch, RAYA_FAME_MIN,

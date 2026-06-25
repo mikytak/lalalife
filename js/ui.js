@@ -254,7 +254,8 @@ const UI = (() => {
     if (!el) return;
     const renderers = {
       activities: renderActivities, relationships: renderRelationships,
-      hobbies: renderHobbies, career: renderCareer, education: renderEducation,
+      hobbies: renderHobbies, fame: renderFame, socialmedia: renderSocialMedia,
+      career: renderCareer, education: renderEducation,
       assets: renderAssets, cheats: Cheats.render, log: renderLog,
     };
     if (renderers[name]) renderers[name]();
@@ -339,35 +340,55 @@ const UI = (() => {
     }
 
     // ── Pets section ───────────────────────────────────────────
-    const petHdr = document.createElement('div'); petHdr.className = 'section-title'; petHdr.textContent = 'Pet'; div.appendChild(petHdr);
-    if (c.pet && c.pet.alive) {
-      const def = DATA.getPet(c.pet.type);
-      const petCard = document.createElement('div'); petCard.className = 'item-card';
-      petCard.innerHTML = `
-        <div class="item-top">
-          <div class="item-icon ${def.iconClass}">${def.icon}</div>
-          <div class="item-info">
-            <div class="item-name">${c.pet.name} the ${def.name}</div>
-            <div class="item-sub">Age ${c.pet.age} · Health ${c.pet.health}${c.pet.sick ? ' <span style="color:var(--red)">· Sick!</span>' : ''}</div>
+    { // ── Pet ───────────────────────────────────────────────────
+      const PET_EMOJI = { dog:'🐕', cat:'🐈', rabbit:'🐇', hamster:'🐹', fish:'🐠', turtle:'🐢', parrot:'🦜' };
+      const petHdr = document.createElement('div'); petHdr.className = 'section-title'; petHdr.textContent = 'Pet'; div.appendChild(petHdr);
+      if (c.pet && c.pet.alive) {
+        const def = DATA.getPet(c.pet.type);
+        const emoji = PET_EMOJI[c.pet.type] || '🐾';
+        const hasE = Engine.hasEnergy();
+        const petCard = document.createElement('div'); petCard.className = 'item-card';
+        const healthColor = c.pet.health >= 70 ? 'var(--green)' : c.pet.health >= 40 ? 'var(--yellow)' : 'var(--red)';
+        petCard.innerHTML = `
+          <div class="item-top">
+            <div style="font-size:2.5rem;margin-right:10px;line-height:1">${emoji}</div>
+            <div class="item-info">
+              <div class="item-name">${c.pet.name} the ${def.name}</div>
+              <div class="item-sub">Age ${c.pet.age} / ${def.lifespan} · <span style="color:${healthColor}">Health ${c.pet.health}%</span>${c.pet.sick ? ' <span style="color:var(--red)">🤒 Sick!</span>' : ''}${c.pet.skillLevel ? ` · Training ${c.pet.skillLevel}/100` : ''}</div>
+              <div style="height:4px;background:#eee;border-radius:4px;margin-top:4px"><div style="height:100%;width:${c.pet.health}%;background:${healthColor};border-radius:4px"></div></div>
+            </div>
           </div>
-        </div>
-        <div class="item-actions">
-          <button class="btn btn-primary btn-sm" id="pet-play">Play</button>
-          ${c.pet.sick || c.pet.health < 70 ? `<button class="btn btn-success btn-sm" id="pet-vet">Vet -${DATA.fmtMoney(def.vetCost)}</button>` : ''}
-        </div>`;
-      petCard.querySelector('#pet-play')?.addEventListener('click', () => {
-        const r = Engine.playWithPet(); showToast(r.msg, r.ok ? 'good' : 'bad'); updateDisplay(); renderActivities();
-      });
-      petCard.querySelector('#pet-vet')?.addEventListener('click', () => {
-        const r = Engine.vetPet(); showToast(r.msg, r.ok ? 'good' : 'bad'); updateDisplay(); renderActivities();
-      });
-      div.appendChild(petCard);
-    } else if (!c.pet || !c.pet.alive) {
-      const adoptBtn = document.createElement('button');
-      adoptBtn.className = 'btn btn-secondary btn-full mb-8';
-      adoptBtn.innerHTML = 'Adopt a Pet<br><small class="text-dim">Choose your companion</small>';
-      adoptBtn.addEventListener('click', () => { closeModal('activities'); showAdoptPetModal(); });
-      div.appendChild(adoptBtn);
+          <div class="item-actions" style="flex-wrap:wrap;gap:5px;margin-top:6px">
+            <button class="btn btn-primary btn-sm" id="pet-play" ${!hasE?'disabled':''}>🎾 Play</button>
+            ${c.pet.type === 'dog' ? `<button class="btn btn-secondary btn-sm" id="pet-walk" ${!hasE?'disabled':''}>🦮 Walk</button>` : ''}
+            ${c.pet.type !== 'fish' && c.pet.type !== 'turtle' ? `<button class="btn btn-secondary btn-sm" id="pet-train" ${!hasE?'disabled':''}>🎓 Train</button>` : ''}
+            <button class="btn btn-secondary btn-sm" id="pet-groom" ${!hasE?'disabled':''}>🛁 Groom</button>
+            ${c.pet.sick || c.pet.health < 70 ? `<button class="btn btn-danger btn-sm" id="pet-vet">🏥 Vet</button>` : ''}
+            <button class="btn btn-ghost btn-sm" id="pet-rename">✏️ Rename</button>
+          </div>`;
+        const ra = (id, fn) => petCard.querySelector(id)?.addEventListener('click', fn);
+        ra('#pet-play',  () => { const r=Engine.playWithPet();  showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
+        ra('#pet-walk',  () => { const r=Engine.walkPet();      showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
+        ra('#pet-train', () => { const r=Engine.trainPet();     showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
+        ra('#pet-groom', () => { const r=Engine.groomPet();     showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
+        ra('#pet-vet',   () => { const r=Engine.vetPet();       showToast(r.msg,r.ok?'good':'bad'); updateDisplay(); renderActivities(); });
+        ra('#pet-rename',() => {
+          const n = prompt(`Rename ${c.pet.name}?`, c.pet.name);
+          if (n) { const r=Engine.renamePet(n); showToast(r.msg,r.ok?'good':'bad'); renderActivities(); }
+        });
+        div.appendChild(petCard);
+      } else if (!c.pet || !c.pet.alive) {
+        if (c.pet && !c.pet.alive) {
+          const rip = document.createElement('p'); rip.className = 'text-dim'; rip.style.fontSize='.8rem';
+          rip.textContent = `Rest in peace, ${c.pet.name}. 🌈`;
+          div.appendChild(rip);
+        }
+        const adoptBtn = document.createElement('button');
+        adoptBtn.className = 'btn btn-secondary btn-full mb-8';
+        adoptBtn.innerHTML = 'Adopt a Pet<br><small class="text-dim">Choose your companion</small>';
+        adoptBtn.addEventListener('click', () => { closeModal('activities'); showAdoptPetModal(); });
+        div.appendChild(adoptBtn);
+      }
     }
 
     // ── Nightlife & Partying (age 16+) ────────────────────────
@@ -431,29 +452,20 @@ const UI = (() => {
       }
     }
 
-    // ── Social Media (age 13+) ─────────────────────────────────
+    // Social Media & Fame shortcuts
     if (c.age >= 13) {
-      const smHdr = document.createElement('div'); smHdr.className = 'section-title'; smHdr.textContent = 'Social Media'; div.appendChild(smHdr);
-      const postTypes = [
-        { id:'general',  label:'Post a Selfie',       sub:'Looks-based. Could go viral · 1 energy' },
-        { id:'art',      label:'Share Your Art',       sub:'Needs drawing hobby · 1 energy',   hobbyReq:'drawing' },
-        { id:'music',    label:'Share Your Music',     sub:'Needs music hobby · 1 energy',     hobbyReq:'music' },
-        { id:'video',    label:'Post a Video',         sub:'Needs filmmaking hobby · 1 energy', hobbyReq:'filmmaking' },
-        { id:'writing',  label:'Share Your Writing',   sub:'Needs writing hobby · 1 energy',   hobbyReq:'writing' },
-      ];
-      postTypes.forEach(pt => {
-        if (pt.hobbyReq && !c.hobbies.find(h => h.id === pt.hobbyReq)) return;
-        const disabled = !Engine.hasEnergy();
-        const card = document.createElement('div');
-        card.className = `item-card${disabled ? ' locked' : ' clickable'}`;
-        card.innerHTML = `<div class="item-top"><div class="item-icon ic-purple">Sm</div><div class="item-info"><div class="item-name">${pt.label}</div><div class="item-sub">${pt.sub}</div></div></div>`;
-        if (!disabled) card.addEventListener('click', () => {
-          const r = Engine.doSocialMedia(pt.id);
-          showToast(r.msg, r.viral ? 'good' : r.ok ? 'info' : 'bad');
-          updateDisplay(); closeModal('activities');
-        });
-        div.appendChild(card);
-      });
+      const smfHdr = document.createElement('div'); smfHdr.className = 'section-title'; smfHdr.textContent = 'Online & Fame'; div.appendChild(smfHdr);
+      const smBtn = document.createElement('button'); smBtn.className = 'btn btn-secondary btn-full mb-8';
+      smBtn.innerHTML = `📱 Social Media${c.fame ? ` · ⭐ Fame ${c.fame}` : ''}<br><small class="text-dim">Post, go viral, build followers</small>`;
+      smBtn.addEventListener('click', () => { closeModal('activities'); openModal('socialmedia'); renderSocialMedia(); });
+      div.appendChild(smBtn);
+      if ((c.fame || 0) >= 10) {
+        const fmBtn = document.createElement('button'); fmBtn.className = 'btn btn-secondary btn-full mb-8';
+        fmBtn.style.cssText = 'background:linear-gradient(135deg,#fef3c7,#fde68a);color:#92400e;border:1.5px solid #f59e0b';
+        fmBtn.innerHTML = `⭐ Fame Actions · ${c.fame} fame<br><small style="color:#b45309">Interviews, tours, endorsements</small>`;
+        fmBtn.addEventListener('click', () => { closeModal('activities'); openModal('fame'); renderFame(); });
+        div.appendChild(fmBtn);
+      }
     }
 
     // ── Therapy (age 16+) ────────────────────────────────────
@@ -964,6 +976,102 @@ const UI = (() => {
     }
   }
 
+  // ── Fame tab ─────────────────────────────────────────────────
+  function renderFame() {
+    const c = State.getChar();
+    const div = qs('#fame-content'); div.innerHTML = '';
+    const fame = c.fame || 0;
+    const hasE = Engine.hasEnergy();
+
+    // Fame meter
+    const meterCard = document.createElement('div'); meterCard.className = 'item-card';
+    const starLabel = fame >= 80 ? '🌟 Legend' : fame >= 60 ? '⭐ Star' : fame >= 40 ? '🎤 Known' : fame >= 20 ? '📣 Rising' : '🌱 Unknown';
+    meterCard.innerHTML = `
+      <div class="item-info">
+        <div class="item-name" style="font-size:1.1rem">${starLabel} · ${fame} fame</div>
+        <div style="height:8px;background:#eee;border-radius:6px;margin:6px 0"><div style="height:100%;width:${fame}%;background:linear-gradient(90deg,#f59e0b,#fbbf24);border-radius:6px"></div></div>
+        <div class="item-sub">Fame unlocks endorsements, tours, Raya dating, and VIP perks</div>
+      </div>`;
+    div.appendChild(meterCard);
+
+    const fameActions = [
+      { id:'interview',    label:'📰 Press Interview',     sub:'Boost fame & get press coverage · 1 energy',            minFame:0  },
+      { id:'endorsement',  label:'💼 Sign Endorsement',    sub:'Earn money from brand deals · 1 energy',                minFame:20 },
+      { id:'charity_event',label:'🎗️ Host Charity Event',  sub:'-$2,000 · boost image & fame · 1 energy',              minFame:0  },
+      { id:'tour',         label:'🎤 Go On Tour',          sub:'Earn big money, gain lots of fame · 1 energy',          minFame:30 },
+      { id:'award_show',   label:'🏆 Attend Award Show',   sub:'Could win an award! · 1 energy',                        minFame:40 },
+      { id:'scandal_pr',   label:'💥 Manufacture Scandal', sub:'Risky — could backfire · 1 energy',                     minFame:10 },
+    ];
+
+    const actHdr = document.createElement('div'); actHdr.className = 'section-title'; actHdr.textContent = 'Fame Actions'; div.appendChild(actHdr);
+    fameActions.forEach(act => {
+      const locked = fame < act.minFame || !hasE;
+      const card = document.createElement('div');
+      card.className = `item-card${locked ? ' locked' : ' clickable'}`;
+      card.innerHTML = `<div class="item-top"><div class="item-info"><div class="item-name">${act.label}</div><div class="item-sub">${act.sub}</div>${act.minFame > fame ? `<div class="item-detail text-dim">Requires ${act.minFame} fame</div>` : ''}</div></div>`;
+      if (!locked) card.addEventListener('click', () => {
+        const r = Engine.doFameAction(act.id);
+        showToast(r.msg, r.bad ? 'bad' : r.ok ? 'good' : 'bad');
+        updateDisplay(); renderFame();
+      });
+      div.appendChild(card);
+    });
+  }
+
+  // ── Social Media tab ─────────────────────────────────────────
+  function renderSocialMedia() {
+    const c = State.getChar();
+    const div = qs('#socialmedia-content'); div.innerHTML = '';
+    const hasE = Engine.hasEnergy();
+    const fame = c.fame || 0;
+
+    // Stats header
+    const statsCard = document.createElement('div'); statsCard.className = 'item-card';
+    statsCard.innerHTML = `
+      <div class="item-info">
+        <div class="item-name">📱 Your Online Presence</div>
+        <div style="display:flex;gap:16px;margin-top:6px;flex-wrap:wrap">
+          <div style="text-align:center"><div style="font-size:1.4rem;font-weight:700;color:var(--accent)">${fame}</div><div style="font-size:.7rem;color:#888">Fame</div></div>
+          <div style="text-align:center"><div style="font-size:1.4rem;font-weight:700;color:var(--pink)">${c.looks}</div><div style="font-size:.7rem;color:#888">Looks</div></div>
+          <div style="text-align:center"><div style="font-size:1.4rem;font-weight:700;color:var(--blue)">${c.smarts}</div><div style="font-size:.7rem;color:#888">Smarts</div></div>
+        </div>
+      </div>`;
+    div.appendChild(statsCard);
+
+    const postHdr = document.createElement('div'); postHdr.className = 'section-title'; postHdr.textContent = 'Post Content'; div.appendChild(postHdr);
+    const postTypes = [
+      { id:'general',   label:'🤳 Post a Selfie',     sub:'Looks-based · 1 energy',                       always:true },
+      { id:'lifestyle', label:'✨ Lifestyle Post',    sub:'Daily life content · 1 energy',                 always:true },
+      { id:'art',       label:'🎨 Share Your Art',     sub:'Needs drawing hobby · 1 energy',               hobbyReq:'drawing' },
+      { id:'music',     label:'🎵 Share Your Music',   sub:'Needs music hobby · 1 energy',                 hobbyReq:'music' },
+      { id:'video',     label:'🎬 Post a Video',       sub:'Needs filmmaking hobby · 1 energy',            hobbyReq:'filmmaking' },
+      { id:'writing',   label:'📝 Share Your Writing', sub:'Needs writing hobby · 1 energy',               hobbyReq:'writing' },
+      { id:'fitness',   label:'💪 Fitness Content',    sub:'Needs sport/dance hobby · 1 energy',           hobbyReq:'sport' },
+    ];
+    postTypes.forEach(pt => {
+      if (pt.hobbyReq && !c.hobbies.find(h => h.id === pt.hobbyReq)) return;
+      const disabled = !hasE;
+      const card = document.createElement('div');
+      card.className = `item-card${disabled ? ' locked' : ' clickable'}`;
+      card.innerHTML = `<div class="item-top"><div class="item-icon ic-purple" style="font-size:1.1rem;background:linear-gradient(135deg,#7c3aed,#a78bfa)">📱</div><div class="item-info"><div class="item-name">${pt.label}</div><div class="item-sub">${pt.sub}</div></div></div>`;
+      if (!disabled) card.addEventListener('click', () => {
+        const r = Engine.doSocialMedia(pt.id);
+        showToast(r.msg, r.viral ? 'good' : r.ok ? 'info' : 'bad');
+        updateDisplay(); renderSocialMedia();
+      });
+      div.appendChild(card);
+    });
+
+    // Activate social media
+    if (!c.socialMediaActive) {
+      const activateHdr = document.createElement('div'); activateHdr.className = 'section-title'; activateHdr.textContent = 'Account'; div.appendChild(activateHdr);
+      const actBtn = document.createElement('button'); actBtn.className = 'btn btn-primary btn-full mb-8';
+      actBtn.innerHTML = '🔔 Activate Social Media Account<br><small>Start building your following</small>';
+      actBtn.addEventListener('click', () => { c.socialMediaActive = true; State.saveGame(); showToast('Account activated! Start posting.', 'good'); renderSocialMedia(); });
+      div.appendChild(actBtn);
+    }
+  }
+
   function showCasinoModal() {
     const c = State.getChar();
     const bets = [100, 500, 1000, 5000, 10000].filter(b => b <= c.money);
@@ -1131,7 +1239,7 @@ const UI = (() => {
         const card = document.createElement('div');
         const isEx = rel.type === 'ex';
         card.className = `item-card${(active || isEx) ? ' clickable' : ' rel-dead'}`;
-        const iconMap = { father:'Fa', mother:'Mo', sibling:'Si', child:'Ch', friend:'Fr', crush:'Cr', partner:'Pa', spouse:'Sp', ex:'Ex', professor:'Pr' };
+        const iconMap = { father:'Fa', mother:'Mo', sibling:'Si', child:'Ch', grandchild:'Gc', friend:'Fr', crush:'Cr', partner:'Pa', spouse:'Sp', ex:'Ex', professor:'Pr' };
         const icon = iconMap[rel.subtype] || '??';
         const inCircle = c.socialCircle.includes(rel.id);
         const isRomantic = rel.type === 'partner';
@@ -2335,6 +2443,27 @@ const UI = (() => {
     qs('#death-achievements').innerHTML = s.achievements.map(a=>`<div class="ach-badge">${a.name}</div>`).join('');
     if (s.cheatsUsed) qs('#cheats-watermark').classList.remove('hidden');
 
+    // Show descendant options if any children/grandchildren exist
+    const descendants = Engine.getDescendants();
+    const descEl = qs('#descendant-options');
+    if (descendants.length > 0 && descEl) {
+      descEl.style.display = 'block';
+      descEl.innerHTML = `<div style="font-size:.85rem;font-weight:700;color:var(--accent);margin-bottom:8px">👨‍👩‍👧 Continue as a Descendant</div>`;
+      descendants.forEach(d => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-secondary btn-full mb-8';
+        btn.innerHTML = `Play as ${d.name.replace(/^(Brother|Sister) /,'')} (your ${d.subtype})<br><small class="text-dim">Carry the family legacy forward</small>`;
+        btn.addEventListener('click', () => {
+          const opts = Engine.createDescendantCharacter(d.id);
+          if (!opts) return;
+          App.startDescendantLife(opts);
+        });
+        descEl.appendChild(btn);
+      });
+    } else if (descEl) {
+      descEl.style.display = 'none';
+    }
+
     // Save legacy and show legacy info
     const legacyResult = Engine.saveLegacy(s);
     if (legacyResult) {
@@ -2568,7 +2697,7 @@ const UI = (() => {
   return {
     showScreen, updateDisplay, addFeedEntry, rebuildFeed,
     showEventModal, showToast, openModal, closeModal,
-    renderActivities, renderRelationships, renderHobbies, renderCareer, renderEducation, renderAssets, renderLog,
+    renderActivities, renderRelationships, renderHobbies, renderFame, renderSocialMedia, renderCareer, renderEducation, renderAssets, renderLog,
     showDeathScreen, showCharacterPreview, populateCountrySelect,
     showLifeMoment, hideLifeMoment,
   };

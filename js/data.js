@@ -1795,11 +1795,17 @@ const DATA = (() => {
     const age   = character.age;
     const stage = getStage(age);
     const hasPartner = relationships.some(r => r.type === 'partner' && r.status === 'active');
+    const isMarried  = relationships.some(r => r.subtype === 'spouse' && r.status === 'active');
+    const hasCrush   = relationships.some(r => r.subtype === 'crush' && r.status === 'active');
     const jobCat = character.career.jobId ? (CAREERS[character.career.jobId] || {}).category : null;
     const isLgbt = character.sexuality !== 'straight' || character.genderIdentity !== 'cis';
 
     const available = EVENTS.filter(ev => {
       if (ev.once && usedOnce.has(ev.id)) return false;
+      // Never propose again if already married
+      if ((ev.id === 'first_relationship' || ev.addPartner || ev.choices?.some(c=>c.addPartner)) && isMarried) return false;
+      // Never re-trigger crush events if already has a crush or partner
+      if ((ev.addCrush || ev.choices?.some(c=>c.addCrush)) && (hasCrush || hasPartner || isMarried)) return false;
       if (ev.stage !== 'any' && ev.stage !== stage) return false;
       if (ev.minAge && age < ev.minAge) return false;
       if (ev.maxAge && age > ev.maxAge) return false;

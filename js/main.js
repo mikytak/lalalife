@@ -214,7 +214,21 @@ const Game = (() => {
     UI.openModal('cheats');
   }
 
-  return { init, newGame, startNewLife, continueGame };
+  function startDescendantLife(opts) {
+    const { characterData, relationships, initCounter } = Engine.createCharacter(opts);
+    State.init(characterData);
+    const g = State.get();
+    relationships.forEach(rel => { rel.id = 'rel_' + (++g.relationshipIdCounter); g.relationships.push(rel); });
+    g.relationshipIdCounter = initCounter;
+    State.saveGame();
+    State.addLog(0, `Born as ${characterData.firstName} ${characterData.lastName} in ${characterData.country}.`, 'birth');
+    State.addLog(0, `Descendant of ${opts.ancestorName}. The legacy continues.`, 'family');
+    UI.rebuildFeed(); UI.updateDisplay(); UI.showScreen('game');
+    UI.showToast(`A new chapter: ${characterData.firstName} ${characterData.lastName}!`, 'good');
+    setTimeout(() => UI.showLifeMoment('👨‍👩‍👧', 'New Generation!', `${characterData.firstName} carries the ${characterData.lastName} family legacy.`, 'nepo'), 600);
+  }
+
+  return { init, newGame, startNewLife, startDescendantLife, continueGame };
 })();
 
 document.addEventListener('DOMContentLoaded', () => Game.init());
