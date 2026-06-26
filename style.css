@@ -297,12 +297,11 @@ html, body {
   color: #fff;
   flex-direction: column;
   gap: 2px;
-  padding: 8px 12px;
+  padding: 8px 4px;
   border-radius: 14px;
-  min-width: 76px;
+  flex: 1;
   box-shadow: 0 3px 14px rgba(144,118,194,.35);
   border: 1px solid rgba(255,255,255,.2);
-  flex-shrink: 0;
 }
 .btn-ageup:hover:not(:disabled) { box-shadow: 0 4px 20px rgba(144,118,194,.5); filter: brightness(1.05); }
 .ageup-label { font-size: .65rem; font-weight: 600; opacity: .85; letter-spacing: .03em; text-transform: uppercase; }
@@ -1133,12 +1132,61 @@ html, body {
 @media (max-width: 380px) {
   .btn-nav-primary { padding: 6px 2px; }
   .btn-nav-primary .nav-icon { font-size: 1.1rem; }
-  .btn-ageup { min-width: 66px; padding: 8px 8px; }
 }
+
+/* ─── Desktop: revert to original single-row action bar ─────── */
 @media (min-width: 600px) {
   .overlay { align-items: center; }
   .modal { border-radius: var(--radius); max-height: 80dvh; }
   .modal-tall { max-height: 86dvh; }
+
+  /* Flatten the two-row structure back into one row */
+  #action-bar {
+    flex-direction: row;
+    gap: 7px;
+    padding: 9px 12px 11px;
+  }
+  .action-primary,
+  .action-secondary {
+    display: contents; /* children become direct flex items of #action-bar */
+  }
+
+  /* Reset primary tabs to classic nav style */
+  .btn-nav-primary {
+    flex-direction: column;
+    gap: 1px;
+    padding: 6px 6px;
+    font-size: .7rem;
+    border-radius: 10px;
+    min-width: 0;
+  }
+  .btn-nav-primary .nav-icon { font-size: .9rem; line-height: 1.2; }
+  .btn-nav-primary .nav-label { font-size: .62rem; }
+
+  /* Reset Age Up to original size */
+  .btn-ageup {
+    flex: none;
+    min-width: 68px;
+    padding: 8px 10px;
+    border-radius: 11px;
+  }
+  .ageup-next { font-size: 1.05rem; }
+  .ageup-label { letter-spacing: 0; text-transform: none; }
+
+  /* Reset pills to classic nav style */
+  .btn-nav-pill {
+    flex: 1;
+    flex-direction: column;
+    gap: 1px;
+    padding: 6px 4px;
+    height: auto;
+    border-radius: 10px;
+    font-size: .7rem;
+    justify-content: center;
+  }
+
+  /* Hide emoji in pills on desktop (text already describes them) */
+  .btn-nav-pill { white-space: nowrap; }
 }
 
 /* ─── Nav badges ─────────────────────────────────────────────── */
