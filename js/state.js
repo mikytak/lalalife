@@ -200,7 +200,8 @@ const State = (() => {
     if (effects.looks        !== undefined) c.looks        = clampStat(c.looks        + effects.looks);
     if (effects.money        !== undefined) c.money        = Math.max(-999999, c.money + effects.money);
     if (effects.fame         !== undefined) c.fame         = clampStat((c.fame || 0)  + effects.fame);
-    if (effects.mentalHealth !== undefined) c.mentalHealth = clampStat((c.mentalHealth ?? 80) + effects.mentalHealth);
+    if (effects.mentalHealth  !== undefined) c.mentalHealth  = clampStat((c.mentalHealth ?? 80) + effects.mentalHealth);
+    if (effects.reputation    !== undefined) c.reputation    = clampStat((c.reputation    ?? 50) + effects.reputation);
     _save();
   }
 

@@ -163,6 +163,17 @@ const Game = (() => {
     document.querySelectorAll('[data-modal]').forEach(btn => {
       btn.addEventListener('click', () => { if (!State.get()) return; UI.openModal(btn.dataset.modal); });
     });
+
+    // Collapsible stats header
+    const statsToggle = document.getElementById('stats-toggle');
+    const statsBars   = document.getElementById('stats-bars-wrap');
+    const statsHeader = document.getElementById('stats-header');
+    if (statsToggle && statsBars) {
+      statsToggle.addEventListener('click', () => {
+        const collapsed = statsBars.classList.toggle('collapsed');
+        statsHeader.classList.toggle('stats-collapsed', collapsed);
+      });
+    }
   }
 
   function wireModalClose() {

@@ -413,10 +413,11 @@ const Engine = (() => {
         c.education.pendingCert = null;
       } else {
         const lvlMap = { some_college:'bachelor', bachelor:'master', master:'doctorate' };
-        c.education.level = lvlMap[c.education.level] || 'bachelor';
+        const prevLevel = c.education.level;
+        c.education.level = lvlMap[prevLevel] || 'bachelor';
         State.addLog(c.age, `Graduated with a degree in ${c.education.major} (${c.education.level})`, 'edu');
         UI.showToast(`Graduated! ${c.education.level} degree earned.`, 'good');
-        const gradEmoji = c.education.level === 'doctorate' ? '🎓' : '🎓';
+        const gradEmoji = '🎓';
         const gradMsg   = c.education.level === 'doctorate' ? 'Doctor! The highest honour.' : c.education.level === 'master' ? 'Master\'s degree earned!' : 'College graduate!';
         UI.showLifeMoment(gradEmoji, gradMsg, `${c.education.major} — all those late nights paid off.`, 'graduate');
       }
@@ -736,9 +737,9 @@ const Engine = (() => {
   // ── Spouse wealth generation (called once on marriage) ───────
   function _assignSpouseWealth(spouse, char) {
     if (spouse.money !== undefined) return; // already assigned
-    const wealthTiers = { impoverished:[500,5000], lower_class:[5000,30000], middle_class:[20000,120000], upper_class:[80000,500000], wealthy:[300000,2000000] };
-    const tier = char.wealthClass || 'middle_class';
-    const [lo, hi] = wealthTiers[tier] || wealthTiers.middle_class;
+    const wealthTiers = { impoverished:[500,5000], lower:[5000,30000], middle:[20000,120000], 'upper-middle':[80000,500000], wealthy:[300000,2000000], 'ultra-rich':[1000000,10000000] };
+    const tier = char.wealthClass || 'middle';
+    const [lo, hi] = wealthTiers[tier] || wealthTiers.middle;
     spouse.money = Math.round(lo + Math.random() * (hi - lo));
     spouse.investments = Math.random() > 0.5 ? Math.round(spouse.money * (Math.random() * 0.4)) : 0;
     spouse.houses = Math.random() > 0.7 ? [{ name:'Partner\'s Home', value: Math.round(100000 + Math.random()*200000), equity: Math.round(20000 + Math.random()*80000) }] : [];
@@ -816,7 +817,7 @@ const Engine = (() => {
     if (!parents.length) return { ok:false, msg:'No living parents to ask.' };
     c.askedParentsAge = c.age;
     const avgRel = parents.reduce((s, p) => s + p.relationship, 0) / parents.length;
-    const wealthMod = { impoverished:0.2, lower_class:0.5, middle_class:1.0, upper_class:2.0, wealthy:5.0 }[c.wealthClass] || 1.0;
+    const wealthMod = { impoverished:0.2, lower:0.5, middle:1.0, 'upper-middle':2.0, wealthy:5.0, 'ultra-rich':10.0 }[c.wealthClass] || 1.0;
     const chance = Math.min(0.9, 0.3 + (avgRel - 50) * 0.01);
     if (Math.random() < chance) {
       const base = Math.round((500 + Math.random() * 4500) * wealthMod);
@@ -2768,7 +2769,7 @@ const Engine = (() => {
       if (rel.type === 'friend' && rel.status === 'active' && rel.relationship <= 10) {
         rel.type = 'enemy';
         rel.subtype = 'enemy';
-        State.addLog(0, `${rel.name} has become an enemy.`, 'bad');
+        State.addLog(g.character.age, `${rel.name} has become an enemy.`, 'bad');
         // Enemies occasionally cause negative events passively
       }
     });

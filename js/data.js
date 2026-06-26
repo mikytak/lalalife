@@ -1816,9 +1816,8 @@ const DATA = (() => {
         const hasLivingParent = relationships.some(r => (r.subtype==='father'||r.subtype==='mother') && r.status==='active');
         if (!hasLivingParent) return false;
       }
-      // sexuality discovery event only fires if not yet known
-      if (ev.id === 'coming_out_decision' && character.sexualityKnown === false) return true;
-      if (ev.id === 'coming_out_decision' && character.sexualityKnown !== false) return false;
+      // coming out event only fires once player knows their sexuality
+      if (ev.id === 'coming_out_decision' && character.sexualityKnown === false) return false;
       return true;
     });
 

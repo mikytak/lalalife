@@ -107,7 +107,7 @@
 
   <!-- Stats Header -->
   <div id="stats-header">
-    <div class="header-top">
+    <div class="header-top" id="stats-toggle" title="Tap to collapse stats">
       <div>
         <span id="hdr-name" class="hdr-name">—</span>
         <span id="hdr-age" class="hdr-age">Age 0</span>
@@ -116,9 +116,10 @@
         <span id="hdr-money" class="hdr-money">$0</span>
         <span id="hdr-job" class="hdr-job badge">Newborn</span>
         <span id="hdr-lifegoal" class="hdr-job badge" style="display:none;font-size:.65rem"></span>
+        <span class="stats-chevron" id="stats-chevron">▾</span>
       </div>
     </div>
-    <div class="stats-bars">
+    <div class="stats-bars" id="stats-bars-wrap">
       <div class="stat-row">
         <span class="stat-dot dot-health"></span>
         <span class="stat-label">Health</span>
@@ -165,19 +166,25 @@
 
   <!-- Action Bar -->
   <div id="action-bar">
-    <button id="btn-age-up" class="btn btn-ageup">
-      <span class="ageup-label">Age Up</span>
-      <span id="ageup-next" class="ageup-next">1</span>
-    </button>
-    <button class="btn btn-nav" data-modal="activities">Do<br><small>Activities</small><span class="nav-badge" id="badge-activities" style="display:none"></span></button>
-    <button class="btn btn-nav" data-modal="fame">Fame<br><small>Spotlight</small><span class="nav-badge" id="badge-fame" style="display:none"></span></button>
-    <button class="btn btn-nav" data-modal="socialmedia">Social<br><small>Media</small><span class="nav-badge" id="badge-socialmedia" style="display:none"></span></button>
-    <button class="btn btn-nav" data-modal="relationships">People<br><small>Relations</small><span class="nav-badge" id="badge-relationships" style="display:none"></span></button>
-    <button class="btn btn-nav" data-modal="hobbies">Hobbies<br><small>Skills</small><span class="nav-badge" id="badge-hobbies" style="display:none"></span></button>
-    <button class="btn btn-nav" data-modal="career">Work<br><small>Career</small><span class="nav-badge" id="badge-career" style="display:none"></span></button>
-    <button class="btn btn-nav" data-modal="education">Learn<br><small>Education</small><span class="nav-badge" id="badge-education" style="display:none"></span></button>
-    <button class="btn btn-nav" data-modal="assets">Assets<br><small>Finance</small><span class="nav-badge" id="badge-assets" style="display:none"></span></button>
-    <button class="btn btn-nav btn-cheat" data-modal="cheats">Cheats<br><small>God Mode</small></button>
+    <!-- Row 1: Age Up + primary tabs -->
+    <div class="action-primary">
+      <button id="btn-age-up" class="btn btn-ageup">
+        <span class="ageup-label">Age Up</span>
+        <span id="ageup-next" class="ageup-next">1</span>
+      </button>
+      <button class="btn btn-nav btn-nav-primary" data-modal="activities"><span class="nav-icon">🎯</span><span class="nav-label">Do<span class="nav-badge" id="badge-activities" style="display:none"></span></span></button>
+      <button class="btn btn-nav btn-nav-primary" data-modal="relationships"><span class="nav-icon">👥</span><span class="nav-label">People<span class="nav-badge" id="badge-relationships" style="display:none"></span></span></button>
+      <button class="btn btn-nav btn-nav-primary" data-modal="career"><span class="nav-icon">💼</span><span class="nav-label">Work<span class="nav-badge" id="badge-career" style="display:none"></span></span></button>
+      <button class="btn btn-nav btn-nav-primary" data-modal="assets"><span class="nav-icon">💰</span><span class="nav-label">Money<span class="nav-badge" id="badge-assets" style="display:none"></span></span></button>
+    </div>
+    <!-- Row 2: Secondary scrollable pills -->
+    <div class="action-secondary">
+      <button class="btn btn-nav btn-nav-pill" data-modal="education">📚 Learn<span class="nav-badge" id="badge-education" style="display:none"></span></button>
+      <button class="btn btn-nav btn-nav-pill" data-modal="hobbies">🎨 Hobbies<span class="nav-badge" id="badge-hobbies" style="display:none"></span></button>
+      <button class="btn btn-nav btn-nav-pill" data-modal="fame">🌟 Fame<span class="nav-badge" id="badge-fame" style="display:none"></span></button>
+      <button class="btn btn-nav btn-nav-pill" data-modal="socialmedia">📱 Social<span class="nav-badge" id="badge-socialmedia" style="display:none"></span></button>
+      <button class="btn btn-nav btn-nav-pill btn-cheat" data-modal="cheats">✨ Cheats</button>
+    </div>
   </div>
 
 </div>

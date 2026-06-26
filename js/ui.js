@@ -2354,14 +2354,26 @@ const UI = (() => {
           selected.splice(idx, 1);
           btn.style.background = '';
           btn.style.fontWeight = '';
+          btn.style.opacity = '';
         } else if (selected.length < 3) {
           selected.push(goal.id);
           btn.style.background = 'var(--accent-light)';
           btn.style.fontWeight = '700';
+          btn.style.opacity = '';
         }
+        // Dim unselected options when 3 are already chosen
+        goalBtns.forEach(b => {
+          const isSelected = selected.includes(b._goalId);
+          if (selected.length >= 3 && !isSelected) {
+            b.style.opacity = '0.4';
+          } else {
+            b.style.opacity = '';
+          }
+        });
         confirmBtn.textContent = `Set Goals (${selected.length}/3)`;
         confirmBtn.disabled = selected.length !== 3;
       });
+      btn._goalId = goal.id;
       goalBtns.push(btn);
       choicesDiv.appendChild(btn);
     });
